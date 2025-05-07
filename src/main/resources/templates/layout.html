@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout">
+<head>
+    <meta charset="UTF-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title layout:fragment="title">TestWeave</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f8fa;
+            color: #333;
+        }
+
+        main {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1 {
+            color: #0077b6;
+            font-size: 1.8em;
+            margin-bottom: 20px;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 20px;
+        }
+
+        th, td {
+            border: 1px solid #aaa;
+            padding: 10px;
+            text-align: left;
+            font-size: 0.95em;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+
+        .pass {
+            color: green;
+            font-weight: bold;
+        }
+
+        .fail {
+            color: red;
+            font-weight: bold;
+        }
+
+        a.button, button {
+            display: inline-block;
+            padding: 8px 14px;
+            margin: 10px 5px 10px 0;
+            background-color: #0077b6;
+            color: white;
+            text-decoration: none;
+            border: none;
+            border-radius: 4px;
+            font-size: 0.95em;
+            cursor: pointer;
+        }
+
+        a.button:hover, button:hover {
+            background-color: #005f8f;
+        }
+
+        form.standard-form {
+            max-width: 600px;
+            margin: 0 auto 20px;
+            padding: 20px;
+            border-radius: 6px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+            background: #ffffff;
+        }
+
+        .form-group {
+            display: flex;
+            align-items: center;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .form-group label {
+            width: 140px;
+            font-weight: bold;
+            margin-right: 10px;
+            word-break: break-word;
+        }
+
+        .form-group input[type="text"],
+        .form-group select {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 0.95em;
+        }
+
+        .form-group textarea {
+            flex: 1;
+            padding: 8px;
+            font-size: 0.95em;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            resize: vertical;
+            min-height: 80px;
+            font-family: 'Courier New', monospace;
+        }
+
+        form.inline-form {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        form.inline-form label {
+            margin: 0;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
+        form.inline-form select,
+        form.inline-form input[type="text"] {
+            width: auto;
+            padding: 8px;
+            font-size: 0.95em;
+        }
+
+        footer {
+            margin-top: 40px;
+            font-size: 0.85em;
+            color: #888;
+            text-align: center;
+            padding-bottom: 20px;
+        }
+
+        /* Responsive */
+        @media (max-width: 600px) {
+            main {
+                padding: 10px;
+            }
+
+            table, th, td {
+                font-size: 0.85em;
+            }
+
+            h1 {
+                font-size: 1.4em;
+            }
+
+            input[type="text"], select, button, a.button {
+                font-size: 0.9em;
+            }
+
+            .form-group {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .form-group label {
+                width: auto;
+                margin-bottom: 6px;
+            }
+
+            form.inline-form {
+                flex-direction: column;
+                align-items: stretch;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<main layout:fragment="content"></main>
+
+<footer>
+    © 2025 TestWeave
+</footer>
+
+</body>
+</html>
