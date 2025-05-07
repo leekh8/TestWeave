@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: testweave
+    runtime: docker
+    buildCommand: ./gradlew build
+    startCommand: java -jar build/libs/*.jar
+    dockerfilePath: ./Dockerfile
