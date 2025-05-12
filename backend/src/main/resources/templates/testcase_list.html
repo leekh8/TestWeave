@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ko" layout:decorate="~{layout}"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>테스트케이스 목록</title>
+</head>
+<body>
+<div layout:fragment="content">
+    <h1>📋 등록된 테스트케이스 목록</h1>
+
+    <table>
+        <thead>
+        <tr>
+            <th>ID</th>
+            <th>유형</th>
+            <th>URL</th>
+            <th>메서드</th>
+            <th>예상 응답</th>
+            <th>실행</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="testCase : ${testCases}">
+            <td th:text="${testCase.id}"></td>
+            <td th:text="${testCase.type}"></td>
+            <td th:text="${testCase.targetUrl}"></td>
+            <td th:text="${testCase.httpMethod}"></td>
+            <td th:text="${testCase.expectedRes}"></td>
+            <td>
+                <form class="inline-form" method="get" th:action="@{/testweave/testcase/{id}/run(id=${testCase.id})}">
+                    <button type="submit">실행</button>
+                </form>
+            </td>
+        </tr>
+        </tbody>
+    </table>
+
+    <a class="button" href="/testweave/testcase/form">➕ 테스트케이스 등록</a>
+    <a class="button" href="/testweave/testresult/list">✅ 실행 결과 보기</a>
+</div>
+</body>
+</html>

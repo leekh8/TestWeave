@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ko" layout:decorate="~{layout}"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>테스트 결과 목록</title>
+</head>
+<body>
+<div layout:fragment="content">
+    <h1>✅ 테스트 실행 결과 목록</h1>
+
+    <table class="stats-box" th:if="${stats != null}">
+        <thead>
+        <tr>
+            <th>총 실행</th>
+            <th>PASS</th>
+            <th>FAIL</th>
+            <th>성공률</th>
+            <th>평균 실행 시간</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr>
+            <td th:text="${stats.totalCount}"></td>
+            <td th:text="${stats.passCount}"></td>
+            <td th:text="${stats.failCount}"></td>
+            <td th:text="${stats.passRate}"></td>
+            <td th:text="${stats.avgExecutionTime + ' ms'}"></td>
+        </tr>
+        </tbody>
+    </table>
+
+    <form class="inline-form" method="get" th:action="@{/testweave/testresult/list}">
+        <label for="status">상태:</label>
+        <select id="status" name="status">
+            <option value="">전체</option>
+            <option value="PASS">PASS</option>
+            <option value="FAIL">FAIL</option>
+        </select>
+
+        <label for="sort">정렬:</label>
+        <select id="sort" name="sort">
+            <option value="">기본</option>
+            <option value="time">실행 시간순</option>
+            <option value="date">최신순</option>
+        </select>
+
+        <button type="submit">적용</button>
+    </form>
+
+    <table>
+        <thead>
+        <tr>
+            <th>테스트 ID</th>
+            <th>상태</th>
+            <th>실행 시간 (ms)</th>
+            <th>실행 일시</th>
+            <th>대상 URL</th>
+            <th>오류 메시지</th>
+            <th>리포트</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="result : ${results}">
+            <td th:text="${result.testCase.id}"></td>
+            <td th:classappend="${result.status == 'PASS'} ? 'pass' : 'fail'" th:text="${result.status}"></td>
+            <td th:text="${result.executionTime}"></td>
+            <td th:text="${#temporals.format(result.executedAt, 'yyyy-MM-dd HH:mm:ss')}"></td>
+            <td th:text="${result.testCase.targetUrl}"></td>
+            <td th:text="${result.errorMessage}">-</span></td>
+            <td>
+                <a target="_blank" th:href="@{/report/{id}(id=${result.id})}">📄 HTML</a> |
+                <a download target="_blank" th:href="@{/report/pdf/{id}(id=${result.id})}">📥 PDF</a>
+            </td>
+        </tr>
+        </tbody>
+    </table>
+
+    <a class="button" href="/testweave/testcase/list">← 테스트 목록으로 돌아가기</a>
+</div>
+</body>
+</html>
