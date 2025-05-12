@@ -6,5 +6,6 @@ COPY . .
 
 RUN chmod +x ./gradlew
 RUN ./gradlew build
+RUN ls -la build/libs/
 
-CMD ["java", "-jar", "build/libs/testweave-0.0.1-SNAPSHOT.jar"]
+CMD find ./build/libs -name "*.jar" | xargs java -jar
