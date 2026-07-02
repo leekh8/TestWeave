@@ -21,6 +21,9 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 
+    // HTML 리포트 렌더링 — 템플릿 엔진 코어만 사용 (spring 통합 starter는 불필요)
+    implementation 'org.thymeleaf:thymeleaf'
+
     // 로컬 개발용 H2 (무설치). 운영 PostgreSQL은 배포 단계에서 별도 프로파일로 추가.
     runtimeOnly 'com.h2database:h2'
 
