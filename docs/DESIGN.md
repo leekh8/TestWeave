@@ -25,7 +25,7 @@
    │   ├─ ScanResult 저장 (PASS/FAIL/detail)
    │   └─ verdict(baseline, current) → Regression
    │
-[출력] REST(JSON) · demo 프로파일(콘솔) · (로드맵) HTML 리포트
+[출력] REST(JSON) · demo 프로파일(콘솔) · HTML 리포트(REST/파일) · ci 프로파일(reports/ + summary.json)
 ```
 
 **설계 원칙 — 서버가 무거운 실행을 하지 않는다.** 이전 프로토타입은 웹 서버가 요청마다 `new ChromeDriver()`로 브라우저를 띄웠는데, 이는 (a) 무료 PaaS에서 실행 불가에 가깝고 (b) 동시성·안정성이 나쁘다. 보안 점검은 순수 HTTP/TLS 호출이라 브라우저가 필요 없고, 정기 실행은 서버 내부가 아니라 **CI(GitHub Actions)/CLI**에서 도는 것을 지향한다.
@@ -60,11 +60,17 @@ baseline은 `ScanResult` 이력에서 "규칙별 가장 최근 상태"로 계산
 1. ✅ 구조 평탄화(중첩 Gradle 제거) + 도메인 피벗 + H2
 2. ✅ `HeaderCheck` + 회귀 비교 + `demo` 콘솔 실행 (첫 완성점)
 3. ✅ `CookieCheck` · `TlsCheck`
-4. ⬜ HTML 리포트(Thymeleaf) — `REGRESSION` 강조
+4. ✅ HTML 리포트(Thymeleaf 엔진 코어) — `REGRESSION` 강조 (2026-07-02)
 5. ⬜ `AuthCheck`(인가 회귀)
-6. ⬜ GitHub Actions 스케줄(정기 회귀) + Slack 알림
-7. ⬜ PostgreSQL 프로파일 분리 + 배포
+6. ✅ GitHub Actions 스케줄(정기 회귀) — `ci` 프로파일 + H2 파일 DB baseline(actions/cache 유지), 회귀/오류 시 워크플로우 실패 → GitHub 기본 알림 (2026-07-02). Slack 알림은 ⬜
+7. ⬜ PostgreSQL 프로파일 분리 + 서버 상시 배포
 8. ⬜ OWASP ZAP(DAST) 연동
+
+### ci 프로파일 설계 메모 (2026-07-02)
+
+- **서버를 띄우지 않는다** (`spring.main.web-application-type=none`) — §2 원칙("정기 실행은 CI에서")의 구현.
+- baseline은 `jdbc:h2:file:./data/testweave` — 인메모리면 실행마다 이력이 사라져 회귀 판정이 성립 안 함. CI에서는 `actions/cache`(restore-keys prefix 매칭)로 `data/`를 실행 간 유지.
+- 대상 하나의 스캔 예외는 전체를 죽이지 않고 리포트의 "스캔 오류"로 표면화. 회귀/오류 판정은 `summary.json`을 워크플로우가 jq로 읽어 exit code로 변환 — 앱 exit code를 쓰지 않는 이유는 서버 모드(main)와 종료 경로를 공유하기 때문.
 
 ## 6. 테스트 전략
 
