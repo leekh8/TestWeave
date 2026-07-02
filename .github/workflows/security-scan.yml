@@ -1,0 +1,61 @@
+name: Security regression scan
+
+on:
+  schedule:
+    - cron: '20 21 * * *'   # 매일 06:20 KST
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      # baseline(H2 파일 DB)을 실행 간 유지 — 직전 스캔과 비교해야 회귀 판정이 성립
+      - name: Restore baseline DB
+        uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: scan-baseline-${{ github.run_id }}
+          restore-keys: |
+            scan-baseline-
+
+      - name: Run scan (ci profile)
+        run: |
+          chmod +x gradlew
+          ./gradlew bootRun --args='--spring.profiles.active=ci' --console=plain
+
+      - name: Save baseline DB
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: data
+          key: scan-baseline-${{ github.run_id }}
+
+      - name: Upload HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scan-report
+          path: reports/
+          retention-days: 30
+
+      # REGRESSION 또는 스캔 오류가 있으면 워크플로우 실패 → GitHub 기본 알림 발송
+      - name: Fail on regression
+        run: |
+          regressions=$(jq -r '.regressions' reports/summary.json)
+          errors=$(jq -r '.errors' reports/summary.json)
+          echo "REGRESSION=$regressions ERROR=$errors"
+          if [ "$regressions" != "0" ] || [ "$errors" != "0" ]; then
+            echo "::error::보안 회귀 $regressions건 / 스캔 오류 $errors건 감지 — 리포트 아티팩트 확인"
+            exit 1
+          fi

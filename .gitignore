@@ -160,3 +160,8 @@ out/
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
 replay_pid*
+
+### TestWeave 생성물 ###
+# ci 프로파일 baseline DB / 스캔 리포트
+data/
+reports/
