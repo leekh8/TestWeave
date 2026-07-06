@@ -54,4 +54,52 @@ class ReportServiceTest {
         assertTrue(html.contains("스캔 실패"));
         assertTrue(html.contains("UnknownHostException"));
     }
+
+    @Test
+    void rowsSortedRegressionFirst() {
+        TargetReport report = new TargetReport("t", "https://x.example", List.of(
+                new Regression("HEADER", "RULE_SAME", "PASS", "PASS", "SAME"),
+                new Regression("HEADER", "RULE_FIXED", "FAIL", "PASS", "FIXED"),
+                new Regression("TLS", "RULE_REG", "PASS", "FAIL", "REGRESSION")
+        ), null);
+
+        String html = service.render(List.of(report), at);
+
+        int reg = html.indexOf("RULE_REG");
+        int fixed = html.indexOf("RULE_FIXED");
+        int same = html.indexOf("RULE_SAME");
+        assertTrue(reg < fixed && fixed < same, "REGRESSION → FIXED → SAME 순으로 정렬돼야 함");
+    }
+
+    @Test
+    void targetsWithRegressionSortedToTop() {
+        TargetReport clean = new TargetReport("CLEAN_TARGET", "https://a.example", List.of(
+                new Regression("HEADER", "r", "PASS", "PASS", "SAME")), null);
+        TargetReport regressed = new TargetReport("REG_TARGET", "https://b.example", List.of(
+                new Regression("HEADER", "r2", "PASS", "FAIL", "REGRESSION")), null);
+
+        String html = service.render(List.of(clean, regressed), at);
+
+        assertTrue(html.indexOf("REG_TARGET") < html.indexOf("CLEAN_TARGET"),
+                "회귀 보유 대상이 위로 와야 함");
+    }
+
+    @Test
+    void showsAllClearBannerWhenClean() {
+        TargetReport clean = new TargetReport("t", "https://a.example", List.of(
+                new Regression("HEADER", "r", "PASS", "PASS", "SAME")), null);
+
+        String html = service.render(List.of(clean), at);
+
+        assertTrue(html.contains("정상 — 회귀"), "전체 정상 배너 표시");
+    }
+
+    @Test
+    void showsEmptyPlaceholderForNoRules() {
+        TargetReport empty = new TargetReport("t", "https://a.example", List.of(), null);
+
+        String html = service.render(List.of(empty), at);
+
+        assertTrue(html.contains("점검 결과 없음"), "규칙 없는 대상은 placeholder 행 표시");
+    }
 }
