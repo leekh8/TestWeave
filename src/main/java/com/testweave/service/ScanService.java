@@ -39,8 +39,8 @@ public class ScanService {
         SecurityTarget target = targetRepo.findById(targetId)
                 .orElseThrow(() -> new IllegalArgumentException("대상 없음: " + targetId));
 
-        // 직전 스캔의 규칙별 상태 = baseline (새 결과 저장 전에 먼저 읽는다)
-        Map<String, String> baseline = latestStatusByRule(targetId);
+        // 직전 스캔의 (checkType,rule)별 상태 = baseline (새 결과 저장 전에 먼저 읽는다)
+        Map<String, String> baseline = latestStatusByKey(targetId);
 
         List<Regression> regressions = new ArrayList<>();
         for (String rawType : target.getCheckTypes().split(",")) {
@@ -50,18 +50,27 @@ public class ScanService {
             }
             for (CheckOutcome o : check.run(target)) {
                 resultRepo.save(new ScanResult(target, check.type(), o.rule(), o.status(), o.detail()));
-                String prev = baseline.get(o.rule());
+                String prev = baseline.get(key(check.type(), o.rule()));
                 regressions.add(new Regression(check.type(), o.rule(), prev, o.status(), verdict(prev, o.status())));
             }
         }
         return regressions;
     }
 
-    private Map<String, String> latestStatusByRule(Long targetId) {
+    /**
+     * baseline 키 = checkType|rule 복합키.
+     * rule명만으로 키를 잡으면 서로 다른 체크가 같은 rule명(예: HeaderCheck·CookieCheck의
+     * 연결 실패 "HTTP 연결")을 낼 때 충돌해 회귀 판정·집계가 뒤섞인다.
+     */
+    private static String key(String checkType, String rule) {
+        return checkType + "|" + rule;
+    }
+
+    Map<String, String> latestStatusByKey(Long targetId) {
         Map<String, String> latest = new HashMap<>();
-        // 최신순 정렬이므로 각 rule의 첫 등장(=가장 최근) 상태만 취한다
-        for (ScanResult r : resultRepo.findByTargetIdOrderByScannedAtDesc(targetId)) {
-            latest.putIfAbsent(r.getRule(), r.getStatus());
+        // 최신순(동시각이면 id 내림차순) 정렬이므로 각 키의 첫 등장(=가장 최근) 상태만 취한다
+        for (ScanResult r : resultRepo.findByTargetIdOrderByScannedAtDescIdDesc(targetId)) {
+            latest.putIfAbsent(key(r.getCheckType(), r.getRule()), r.getStatus());
         }
         return latest;
     }
