@@ -7,6 +7,10 @@ public record CheckOutcome(String rule, String status, String detail) {
         return new CheckOutcome(rule, "PASS", "");
     }
 
+    public static CheckOutcome pass(String rule, String detail) {
+        return new CheckOutcome(rule, "PASS", detail);
+    }
+
     public static CheckOutcome fail(String rule, String detail) {
         return new CheckOutcome(rule, "FAIL", detail);
     }

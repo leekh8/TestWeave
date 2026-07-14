@@ -44,9 +44,10 @@ public class CookieCheck implements SecurityCheck {
             for (String cookie : cookies) {
                 String name = cookie.split(";", 2)[0].split("=", 2)[0].trim();
                 Set<String> attrs = attributesOf(cookie);
-                outcomes.add(flag(name, "Secure", attrs.contains("secure")));
+                boolean secure = attrs.contains("secure");
+                outcomes.add(flag(name, "Secure", secure));
                 outcomes.add(flag(name, "HttpOnly", attrs.contains("httponly")));
-                outcomes.add(flag(name, "SameSite", attrs.contains("samesite")));
+                outcomes.add(sameSiteOutcome(name, sameSiteValue(cookie), secure));
             }
         } catch (Exception ex) {
             outcomes.add(CheckOutcome.fail("HTTP 연결", target.getUrl() + " 요청 실패: " + ex.getMessage()));
@@ -76,5 +77,33 @@ public class CookieCheck implements SecurityCheck {
     private CheckOutcome flag(String cookie, String attr, boolean present) {
         String rule = "쿠키 " + cookie + " " + attr + " 플래그";
         return present ? CheckOutcome.pass(rule) : CheckOutcome.fail(rule, attr + " 누락");
+    }
+
+    /** SameSite 속성 값(소문자)을 반환. 없으면 null. */
+    static String sameSiteValue(String setCookie) {
+        String[] parts = setCookie.split(";");
+        for (int i = 1; i < parts.length; i++) {
+            String attr = parts[i].trim();
+            int eq = attr.indexOf('=');
+            if (eq > 0 && attr.substring(0, eq).trim().equalsIgnoreCase("samesite")) {
+                return attr.substring(eq + 1).trim().toLowerCase();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * SameSite 판정. 누락이면 FAIL. SameSite=None은 반드시 Secure와 함께여야 하며,
+     * Secure 없는 None은 최신 브라우저가 거부하거나 CSRF에 취약하므로 FAIL.
+     */
+    static CheckOutcome sameSiteOutcome(String cookie, String sameSite, boolean secure) {
+        String rule = "쿠키 " + cookie + " SameSite 플래그";
+        if (sameSite == null) {
+            return CheckOutcome.fail(rule, "SameSite 누락");
+        }
+        if (sameSite.equals("none") && !secure) {
+            return CheckOutcome.fail(rule, "SameSite=None 인데 Secure 없음");
+        }
+        return CheckOutcome.pass(rule);
     }
 }
