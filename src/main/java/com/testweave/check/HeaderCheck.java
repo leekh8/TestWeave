@@ -45,6 +45,11 @@ public class HeaderCheck implements SecurityCheck {
     @Override
     public List<CheckOutcome> run(SecurityTarget target) {
         List<CheckOutcome> outcomes = new ArrayList<>();
+        String block = SsrfGuard.blockReason(target.getUrl());
+        if (block != null) {  // 내부/사설 대상은 fetch 전에 차단
+            outcomes.add(CheckOutcome.fail("SSRF 차단", block));
+            return outcomes;
+        }
         try {
             HttpRequest req = HttpRequest.newBuilder(URI.create(target.getUrl()))
                     .timeout(Duration.ofSeconds(15))

@@ -33,6 +33,11 @@ public class TlsCheck implements SecurityCheck {
     @Override
     public List<CheckOutcome> run(SecurityTarget target) {
         List<CheckOutcome> outcomes = new ArrayList<>();
+        String block = SsrfGuard.blockReason(target.getUrl());
+        if (block != null) {  // 내부/사설 대상은 연결 전에 차단
+            outcomes.add(CheckOutcome.fail("SSRF 차단", block));
+            return outcomes;
+        }
         try {
             URI uri = URI.create(target.getUrl());
             if (!"https".equalsIgnoreCase(uri.getScheme())) {
