@@ -9,10 +9,10 @@ import java.net.UnknownHostException;
  *
  * 스캐너는 사용자가 준 임의 URL을 fetch하므로, 가드가 없으면 {@code http://127.0.0.1},
  * 사설망({@code 10/8·172.16/12·192.168/16}), 클라우드 메타데이터({@code 169.254.169.254})를
- * 찔러보게 만들 수 있다. 각 검사 모듈은 fetch 전에 {@link #blockReason(String)}로 검증한다.
+ * 찔러보게 만들 수 있다. HTTP 검사 모듈은 {@link SafeHttpFetcher}를 통해 fetch하며,
+ * 이 fetcher가 최초 대상과 모든 리다이렉트 홉을 {@link #blockReason(String)}로 검증한다.
  *
- * <p>주의(잔여 위험): HttpClient의 자동 리다이렉트는 공개 주소에서 내부로 튈 수 있다.
- * 이 가드는 '최초 대상'만 검증하므로, 리다이렉트 기반 SSRF는 후속 과제로 남는다.
+ * <p>잔여 위험: DNS 리바인딩(검증 시점과 연결 시점의 IP 불일치)은 남는다 — {@link SafeHttpFetcher} 참고.
  */
 public final class SsrfGuard {
 

@@ -3,12 +3,7 @@ package com.testweave.check;
 import com.testweave.domain.SecurityTarget;
 import org.springframework.stereotype.Component;
 
-import java.net.URI;
-import java.net.http.HttpClient;
 import java.net.http.HttpHeaders;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -32,10 +27,11 @@ public class HeaderCheck implements SecurityCheck {
         REQUIRED.put("Referrer-Policy", "Referrer-Policy 적용");
     }
 
-    private final HttpClient client = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(10))
-            .followRedirects(HttpClient.Redirect.NORMAL)
-            .build();
+    private final SafeHttpFetcher fetcher;
+
+    public HeaderCheck(SafeHttpFetcher fetcher) {
+        this.fetcher = fetcher;
+    }
 
     @Override
     public String type() {
@@ -45,18 +41,9 @@ public class HeaderCheck implements SecurityCheck {
     @Override
     public List<CheckOutcome> run(SecurityTarget target) {
         List<CheckOutcome> outcomes = new ArrayList<>();
-        String block = SsrfGuard.blockReason(target.getUrl());
-        if (block != null) {  // 내부/사설 대상은 fetch 전에 차단
-            outcomes.add(CheckOutcome.fail("SSRF 차단", block));
-            return outcomes;
-        }
         try {
-            HttpRequest req = HttpRequest.newBuilder(URI.create(target.getUrl()))
-                    .timeout(Duration.ofSeconds(15))
-                    .GET()
-                    .build();
-            HttpResponse<Void> res = client.send(req, HttpResponse.BodyHandlers.discarding());
-            HttpHeaders headers = res.headers();
+            // fetcher가 최초 대상과 모든 리다이렉트 홉을 SsrfGuard로 검증한다
+            HttpHeaders headers = fetcher.fetchHeaders(target.getUrl());
             for (Map.Entry<String, String> e : REQUIRED.entrySet()) {
                 String headerName = e.getKey();
                 String rule = e.getValue();
@@ -71,6 +58,8 @@ public class HeaderCheck implements SecurityCheck {
                             : CheckOutcome.fail(rule, weakness));
                 }
             }
+        } catch (SsrfBlockedException e) {
+            outcomes.add(CheckOutcome.fail("SSRF 차단", e.getMessage()));
         } catch (Exception ex) {
             outcomes.add(CheckOutcome.fail("HTTP 연결", target.getUrl() + " 요청 실패: " + ex.getMessage()));
         }

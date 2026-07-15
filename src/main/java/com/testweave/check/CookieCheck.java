@@ -3,11 +3,7 @@ package com.testweave.check;
 import com.testweave.domain.SecurityTarget;
 import org.springframework.stereotype.Component;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
+import java.net.http.HttpHeaders;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -17,10 +13,11 @@ import java.util.Set;
 @Component
 public class CookieCheck implements SecurityCheck {
 
-    private final HttpClient client = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(10))
-            .followRedirects(HttpClient.Redirect.NORMAL)
-            .build();
+    private final SafeHttpFetcher fetcher;
+
+    public CookieCheck(SafeHttpFetcher fetcher) {
+        this.fetcher = fetcher;
+    }
 
     @Override
     public String type() {
@@ -30,18 +27,10 @@ public class CookieCheck implements SecurityCheck {
     @Override
     public List<CheckOutcome> run(SecurityTarget target) {
         List<CheckOutcome> outcomes = new ArrayList<>();
-        String block = SsrfGuard.blockReason(target.getUrl());
-        if (block != null) {  // 내부/사설 대상은 fetch 전에 차단
-            outcomes.add(CheckOutcome.fail("SSRF 차단", block));
-            return outcomes;
-        }
         try {
-            HttpRequest req = HttpRequest.newBuilder(URI.create(target.getUrl()))
-                    .timeout(Duration.ofSeconds(15))
-                    .GET()
-                    .build();
-            HttpResponse<Void> res = client.send(req, HttpResponse.BodyHandlers.discarding());
-            List<String> cookies = res.headers().allValues("Set-Cookie");
+            // fetcher가 최초 대상과 모든 리다이렉트 홉을 SsrfGuard로 검증한다
+            HttpHeaders headers = fetcher.fetchHeaders(target.getUrl());
+            List<String> cookies = headers.allValues("Set-Cookie");
             if (cookies.isEmpty()) {
                 outcomes.add(CheckOutcome.pass("쿠키 미설정(점검 불필요)"));
                 return outcomes;
@@ -54,6 +43,8 @@ public class CookieCheck implements SecurityCheck {
                 outcomes.add(flag(name, "HttpOnly", attrs.contains("httponly")));
                 outcomes.add(sameSiteOutcome(name, sameSiteValue(cookie), secure));
             }
+        } catch (SsrfBlockedException e) {
+            outcomes.add(CheckOutcome.fail("SSRF 차단", e.getMessage()));
         } catch (Exception ex) {
             outcomes.add(CheckOutcome.fail("HTTP 연결", target.getUrl() + " 요청 실패: " + ex.getMessage()));
         }
