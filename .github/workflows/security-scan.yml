@@ -49,13 +49,21 @@ jobs:
           path: reports/
           retention-days: 30
 
-      # REGRESSION 또는 스캔 오류가 있으면 워크플로우 실패 → GitHub 기본 알림 발송
+      # 게이트: 회귀·스캔오류는 항상 실패. FAIL_ON=fail 이면 상시 FAIL(회귀는 아니지만
+      # 계속 취약한 상태 — 신규 대상이 첫날부터 미충족인 경우 등)도 실패로 승격한다.
       - name: Fail on regression
+        env:
+          FAIL_ON: regression   # regression(기본) | fail(상시 FAIL도 빌드 실패)
         run: |
           regressions=$(jq -r '.regressions' reports/summary.json)
           errors=$(jq -r '.errors' reports/summary.json)
-          echo "REGRESSION=$regressions ERROR=$errors"
-          if [ "$regressions" != "0" ] || [ "$errors" != "0" ]; then
-            echo "::error::보안 회귀 $regressions건 / 스캔 오류 $errors건 감지 — 리포트 아티팩트 확인"
+          fails=$(jq -r '.fails' reports/summary.json)
+          echo "REGRESSION=$regressions FAIL=$fails ERROR=$errors (gate=$FAIL_ON)"
+          bad=0
+          [ "$regressions" != "0" ] && bad=1
+          [ "$errors" != "0" ] && bad=1
+          [ "$FAIL_ON" = "fail" ] && [ "$fails" != "0" ] && bad=1
+          if [ "$bad" != "0" ]; then
+            echo "::error::회귀 $regressions건 / 상시FAIL $fails건 / 스캔오류 $errors건 (gate=$FAIL_ON) — 리포트 아티팩트 확인"
             exit 1
           fi
