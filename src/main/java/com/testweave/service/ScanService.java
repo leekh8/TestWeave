@@ -4,6 +4,7 @@ import com.testweave.check.CheckOutcome;
 import com.testweave.check.SecurityCheck;
 import com.testweave.domain.ScanResult;
 import com.testweave.domain.SecurityTarget;
+import com.testweave.exception.TargetNotFoundException;
 import com.testweave.repository.ScanResultRepository;
 import com.testweave.repository.SecurityTargetRepository;
 import com.testweave.scan.Regression;
@@ -37,7 +38,7 @@ public class ScanService {
     @Transactional
     public List<Regression> scan(Long targetId) {
         SecurityTarget target = targetRepo.findById(targetId)
-                .orElseThrow(() -> new IllegalArgumentException("대상 없음: " + targetId));
+                .orElseThrow(() -> new TargetNotFoundException(targetId));
 
         // 직전 스캔의 (checkType,rule)별 상태 = baseline (새 결과 저장 전에 먼저 읽는다)
         Map<String, String> baseline = latestStatusByKey(targetId);
