@@ -12,9 +12,9 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -22,7 +22,7 @@ jobs:
 
       # baseline(H2 파일 DB)을 실행 간 유지 — 직전 스캔과 비교해야 회귀 판정이 성립
       - name: Restore baseline DB
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: data
           key: scan-baseline-${{ github.run_id }}
@@ -36,14 +36,14 @@ jobs:
 
       - name: Save baseline DB
         if: always()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: data
           key: scan-baseline-${{ github.run_id }}
 
       - name: Upload HTML report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: scan-report
           path: reports/
