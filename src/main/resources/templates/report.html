@@ -25,12 +25,16 @@
         th, td { text-align:left; padding:7px 10px; border-bottom:1px solid var(--line); }
         th { color:var(--muted); font-weight:600; font-size:.78rem; }
         tr.regression { background:rgba(248,113,113,.12); }
+        tr.missing { background:rgba(251,146,60,.12); }
         .badge { display:inline-block; padding:2px 9px; border-radius:99px;
                  font-size:.72rem; font-weight:700; }
         .badge.REGRESSION { background:#7f1d1d; color:#fecaca; }
         .badge.FIXED { background:#14532d; color:#bbf7d0; }
         .badge.NEW { background:#1e3a8a; color:#bfdbfe; }
         .badge.SAME { background:#334155; color:#cbd5e1; }
+        /* 직전엔 쟀는데 이번엔 결과에 없는 규칙. 후퇴(REGRESSION)와 다른 색을 준다.
+           후퇴는 설정을 되돌리는 문제고 소멸은 왜 못 쟀는지부터 보는 문제다. */
+        .badge.MISSING { background:#78350f; color:#fed7aa; }
         .st-FAIL { color:#f87171; font-weight:700; }
         .st-PASS { color:#4ade80; }
         /* 색만으로 PASS/FAIL을 구분하지 않도록 기호 병기 (색맹 접근성) */
@@ -68,6 +72,10 @@
             <div class="num" th:text="${totalRegressions}">0</div>
             <div class="lbl">REGRESSION (후퇴)</div>
         </div>
+        <div class="kpi" th:if="${totalMissing > 0}" th:classappend="'alert'">
+            <div class="num" th:text="${totalMissing}">0</div>
+            <div class="lbl">MISSING (못 잼)</div>
+        </div>
         <div class="kpi ok">
             <div class="num" th:text="${totalFixed}">0</div>
             <div class="lbl">FIXED (개선)</div>
@@ -101,11 +109,13 @@
         <div class="tsum" th:unless="${t.hasError()}">
             <span class="badge REGRESSION" th:if="${t.countVerdict('REGRESSION') > 0}"
                   th:text="'REGRESSION ' + ${t.countVerdict('REGRESSION')}">REGRESSION</span>
+            <span class="badge MISSING" th:if="${t.countMissing() > 0}"
+                  th:text="'MISSING ' + ${t.countMissing()}">MISSING</span>
             <span class="badge FIXED" th:if="${t.countFail() > 0}"
                   style="background:#7f1d1d;color:#fecaca"
                   th:text="'FAIL ' + ${t.countFail()}">FAIL</span>
             <span class="badge SAME"
-                  th:if="${t.countVerdict('REGRESSION') == 0 and t.countFail() == 0}">정상</span>
+                  th:if="${t.countVerdict('REGRESSION') == 0 and t.countFail() == 0 and t.countMissing() == 0}">정상</span>
         </div>
 
         <table th:unless="${t.hasError()}">
@@ -115,7 +125,7 @@
             </thead>
             <tbody>
                 <tr th:each="r : ${t.regressions}"
-                    th:classappend="${r.verdict() == 'REGRESSION'} ? 'regression'">
+                    th:classappend="${r.verdict() == 'REGRESSION'} ? 'regression' : (${r.verdict() == 'MISSING'} ? 'missing')">
                     <td th:text="${r.checkType()}">HEADER</td>
                     <td th:text="${r.rule()}">rule</td>
                     <td th:text="${r.previous()} ?: '—'">-</td>
@@ -130,6 +140,6 @@
         </table>
     </div>
 
-    <footer>TestWeave — 웹 보안 설정 회귀 스캐너. REGRESSION = 직전 PASS → 이번 FAIL (보안 후퇴).</footer>
+    <footer>TestWeave — 웹 보안 설정 회귀 스캐너. REGRESSION = 직전 PASS에서 이번 FAIL (보안 후퇴). MISSING = 직전엔 쟀는데 이번 결과에 없음 (대상 불통 신호).</footer>
 </body>
 </html>

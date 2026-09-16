@@ -84,6 +84,7 @@ public class CiScanRunner implements CommandLineRunner {
         long fixed = reports.stream().mapToLong(r -> r.countVerdict("FIXED")).sum();
         long fails = reports.stream().mapToLong(TargetReport::countFail).sum();
         long errors = reports.stream().filter(TargetReport::hasError).count();
+        long missing = reports.stream().mapToLong(TargetReport::countMissing).sum();
 
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("generatedAt", now.toString());
@@ -93,11 +94,13 @@ public class CiScanRunner implements CommandLineRunner {
         summary.put("fixed", fixed);
         summary.put("fails", fails);
         summary.put("errors", errors);
+        summary.put("missing", missing);
         Files.writeString(dir.resolve("summary.json"),
                 new ObjectMapper().writeValueAsString(summary), StandardCharsets.UTF_8);
 
         System.out.printf("%n=== TestWeave CI 스캔 완료: 대상 %d / 규칙 %d ===%n", urls.size(), totalRules);
-        System.out.printf("  REGRESSION=%d  FIXED=%d  FAIL=%d  ERROR=%d%n", regressions, fixed, fails, errors);
+        System.out.printf("  REGRESSION=%d  MISSING=%d  FIXED=%d  FAIL=%d  ERROR=%d%n",
+                regressions, missing, fixed, fails, errors);
         System.out.println("  리포트: " + dir.resolve("scan-report.html").toAbsolutePath());
     }
 

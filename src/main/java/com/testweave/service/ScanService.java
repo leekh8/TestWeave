@@ -13,8 +13,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -44,6 +46,7 @@ public class ScanService {
         Map<String, String> baseline = latestStatusByKey(targetId);
 
         List<Regression> regressions = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
         for (String rawType : target.getCheckTypes().split(",")) {
             SecurityCheck check = checks.get(rawType.trim());
             if (check == null) {
@@ -51,12 +54,38 @@ public class ScanService {
             }
             for (CheckOutcome o : check.run(target)) {
                 resultRepo.save(new ScanResult(target, check.type(), o.rule(), o.status(), o.detail()));
-                String prev = baseline.get(key(check.type(), o.rule()));
+                String k = key(check.type(), o.rule());
+                seen.add(k);
+                String prev = baseline.get(k);
                 regressions.add(new Regression(check.type(), o.rule(), prev, o.status(), verdict(prev, o.status())));
             }
         }
+
+        // baseline에 있었는데 이번 결과에 없는 규칙 = 규칙 소멸.
+        //
+        // 이번 outcome만 순회하면 이 경우가 판정에서 통째로 빠진다. 그런데 가장 심각한 사고가
+        // 정확히 이 모양으로 나타난다. 대상이 다운되면 HeaderCheck가 예외를 "HTTP 연결" FAIL
+        // 한 행으로 흡수하므로, 원래 있던 헤더 규칙 5개가 결과에서 사라지고 새 규칙 하나가
+        // NEW로 붙는다. REGRESSION은 0이고 예외도 안 새서 CI가 초록불로 통과한다.
+        // 즉 "전부 정상"과 "사이트가 죽었다"가 같은 모양으로 보인다.
+        //
+        // 소멸을 REGRESSION에 합치지 않고 MISSING으로 따로 두는 이유: PASS→FAIL(후퇴)과
+        // 규칙이 사라진 것(관측 불가)은 조치가 다르다. 전자는 설정을 되돌리는 문제고
+        // 후자는 먼저 왜 못 쟀는지를 봐야 한다.
+        for (Map.Entry<String, String> e : baseline.entrySet()) {
+            if (seen.contains(e.getKey())) {
+                continue;
+            }
+            String[] parts = e.getKey().split("\\|", 2);
+            String checkType = parts[0];
+            String rule = parts.length > 1 ? parts[1] : "";
+            regressions.add(new Regression(checkType, rule, e.getValue(), MISSING, MISSING));
+        }
         return regressions;
     }
+
+    /** 직전엔 있었는데 이번 스캔에서 사라진 규칙. current 상태이자 verdict로 함께 쓴다. */
+    public static final String MISSING = "MISSING";
 
     /**
      * baseline 키 = checkType|rule 복합키.

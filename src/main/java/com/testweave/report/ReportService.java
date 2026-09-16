@@ -52,6 +52,7 @@ public class ReportService {
         ctx.setVariable("totalFixed", total(sorted, "FIXED"));
         ctx.setVariable("totalFails", sorted.stream().mapToLong(TargetReport::countFail).sum());
         ctx.setVariable("totalErrors", sorted.stream().filter(TargetReport::hasError).count());
+        ctx.setVariable("totalMissing", sorted.stream().mapToLong(TargetReport::countMissing).sum());
         return engine.process("report", ctx);
     }
 
@@ -59,15 +60,16 @@ public class ReportService {
         return reports.stream().mapToLong(r -> r.countVerdict(verdict)).sum();
     }
 
-    /** 회귀 보유 대상 → 스캔 오류 대상 → 실패 보유 대상 → 나머지 순. */
+    /** 회귀 보유 → 규칙 소멸 → 스캔 오류 → 실패 보유 → 나머지 순. */
     private static int targetRank(TargetReport t) {
         if (t.countVerdict("REGRESSION") > 0) return 0;
-        if (t.hasError()) return 1;
-        if (t.countFail() > 0) return 2;
-        return 3;
+        if (t.countMissing() > 0) return 1;   // 대상이 통째로 안 잡힌 신호
+        if (t.hasError()) return 2;
+        if (t.countFail() > 0) return 3;
+        return 4;
     }
 
-    /** 대상 내 판정 행을 REGRESSION → FAIL → NEW → FIXED → SAME 순으로 정렬한 새 리포트. */
+    /** 대상 내 판정 행을 REGRESSION → MISSING → FAIL → NEW → FIXED → SAME 순으로 정렬한 새 리포트. */
     private static TargetReport sortRows(TargetReport t) {
         if (t.hasError() || t.regressions().isEmpty()) return t;
         List<Regression> rows = t.regressions().stream()
@@ -78,9 +80,10 @@ public class ReportService {
 
     private static int rowRank(Regression r) {
         if ("REGRESSION".equals(r.verdict())) return 0;
-        if ("FAIL".equals(r.current())) return 1;   // 회귀는 아니나 현재 미충족
-        if ("NEW".equals(r.verdict())) return 2;
-        if ("FIXED".equals(r.verdict())) return 3;
-        return 4;                                   // SAME / PASS
+        if ("MISSING".equals(r.verdict())) return 1; // 직전엔 쟀는데 이번엔 못 잰 규칙
+        if ("FAIL".equals(r.current())) return 2;    // 회귀는 아니나 현재 미충족
+        if ("NEW".equals(r.verdict())) return 3;
+        if ("FIXED".equals(r.verdict())) return 4;
+        return 5;                                    // SAME / PASS
     }
 }

@@ -32,6 +32,38 @@ class ReportServiceTest {
         assertTrue(html.contains("class=\"badge REGRESSION\""), "REGRESSION 배지 강조");
     }
 
+    /**
+     * 판정을 코드에만 추가하고 템플릿을 잊으면, 리포트에는 스타일 없는 맨 배지가 찍히고
+     * 대상은 "정상"으로 표시된다. 판정 자체는 맞는데 화면이 거짓말을 한다.
+     */
+    @Test
+    void rendersMissingRulesAsItsOwnVerdict() {
+        // 사이트가 죽은 날의 실제 모양: 연결 실패 한 행 + 어제 재던 규칙들의 소멸
+        TargetReport report = new TargetReport("blog", "https://leekh8.github.io", List.of(
+                new Regression("HEADER", "HTTP 연결", null, "FAIL", "NEW"),
+                new Regression("HEADER", "HSTS 적용", "PASS", "MISSING", "MISSING"),
+                new Regression("HEADER", "CSP 적용", "PASS", "MISSING", "MISSING")
+        ), null);
+
+        String html = service.render(List.of(report), at);
+
+        assertTrue(html.contains("class=\"badge MISSING\""), "MISSING 배지가 나와야 한다");
+        assertTrue(html.contains(".badge.MISSING"), "배지 스타일이 정의돼 있어야 한다");
+        assertTrue(html.contains("MISSING 2"), "대상 헤더에 소멸 건수를 보여야 한다");
+        assertTrue(html.contains("MISSING (못 잼)"), "요약 KPI에 집계돼야 한다");
+        assertFalse(html.contains(">정상<"), "규칙이 사라진 대상을 정상으로 표시하면 안 된다");
+    }
+
+    @Test
+    void allClearStillShowsNormalWhenNothingMissing() {
+        // 위 조건을 추가하면서 멀쩡한 대상까지 "정상"을 잃지 않았는지 본다
+        TargetReport report = new TargetReport("blog", "https://leekh8.github.io", List.of(
+                new Regression("HEADER", "HSTS 적용", "PASS", "PASS", "SAME")
+        ), null);
+
+        assertTrue(service.render(List.of(report), at).contains(">정상<"));
+    }
+
     @Test
     void escapesHtmlInRuleNames() {
         TargetReport report = new TargetReport("t", "https://x.example", List.of(

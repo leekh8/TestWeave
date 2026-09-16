@@ -21,4 +21,9 @@ public record TargetReport(String name, String url, List<Regression> regressions
     public long countFail() {
         return regressions.stream().filter(r -> "FAIL".equals(r.current())).count();
     }
+
+    /** 직전엔 있었는데 이번 스캔에서 사라진 규칙 수. 대상 불통 신호라 게이트가 이 값을 본다. */
+    public long countMissing() {
+        return countVerdict("MISSING");
+    }
 }
