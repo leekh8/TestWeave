@@ -150,12 +150,16 @@ public class CiScanRunner implements CommandLineRunner {
                                   long missing, long fixed, long fails, long errors) {
         String path = System.getenv("GITHUB_STEP_SUMMARY");
         if (path == null || path.isBlank()) {
-            return;   // 로컬 실행. 콘솔 출력으로 충분하다
+            // 로컬 실행. 콘솔 출력으로 충분하다. 다만 CI에서 이 줄이 찍히면
+            // 환경변수가 하위 프로세스까지 안 내려온 것이므로 원인을 바로 안다.
+            System.out.println("  요약: GITHUB_STEP_SUMMARY 미설정, 건너뜀");
+            return;
         }
         try {
             Files.writeString(Path.of(path),
                     stepSummaryMarkdown(targets, rules, regressions, missing, fixed, fails, errors),
                     StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+            System.out.println("  요약 기록: " + path);
         } catch (IOException e) {
             // 요약을 못 써도 스캔 결과는 이미 파일에 있다. 여기서 실패로 끌고 가지 않는다.
             System.err.println("STEP_SUMMARY 기록 실패: " + e.getMessage());
