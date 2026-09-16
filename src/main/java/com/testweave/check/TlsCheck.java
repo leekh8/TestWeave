@@ -25,6 +25,12 @@ public class TlsCheck implements SecurityCheck {
     private static final int CONNECT_TIMEOUT_MS = 10000;
     private static final int READ_TIMEOUT_MS = 10000;
 
+    private final ScanPolicy policy;
+
+    public TlsCheck(ScanPolicy policy) {
+        this.policy = policy;
+    }
+
     @Override
     public String type() {
         return "TLS";
@@ -33,7 +39,7 @@ public class TlsCheck implements SecurityCheck {
     @Override
     public List<CheckOutcome> run(SecurityTarget target) {
         List<CheckOutcome> outcomes = new ArrayList<>();
-        String block = SsrfGuard.blockReason(target.getUrl());
+        String block = SsrfGuard.blockReason(target.getUrl(), policy.allowPrivate());
         if (block != null) {  // 내부/사설 대상은 연결 전에 차단
             outcomes.add(CheckOutcome.fail("SSRF 차단", block));
             return outcomes;

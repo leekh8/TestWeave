@@ -165,3 +165,7 @@ replay_pid*
 # ci 프로파일 baseline DB / 스캔 리포트
 data/
 reports/
+
+# 스캔 대상 목록. 업무 대상 URL이 들어가므로 공개 저장소에 올리지 않는다.
+# 형식과 사용법은 targets.sample.txt 참고.
+targets.local.txt

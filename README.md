@@ -28,6 +28,31 @@ TestWeave는 대상별 점검 결과를 저장하고, 매 스캔을 직전 결�
 - **정기 회귀 (GitHub Actions)** — `ci` 프로파일: 서버 없이 스캔→리포트 파일→종료. baseline은 H2 파일 DB를 actions/cache로 실행 간 유지. 매일 06:20 KST 스케줄, `REGRESSION`/스캔 오류 시 워크플로우 실패 → GitHub 기본 알림. `FAIL_ON=fail`로 두면 회귀가 아닌 **상시 FAIL**(신규 대상이 첫날부터 미충족 등)도 빌드 실패로 승격
 - **데모 실행** — `demo` 프로파일로 띄우면 샘플 대상을 스캔해 회귀 판정을 콘솔에 출력
 
+**실제로 쓰려면:**
+
+```bash
+# 1) 대상 목록을 만든다 (targets.local.txt 는 gitignore 대상)
+cp targets.sample.txt targets.local.txt
+
+# 2) 공개 자산만 점검 (기본)
+./gradlew bootRun --args='--spring.profiles.active=ci'
+
+# 3) 사내 자산까지 점검
+./gradlew bootRun --args='--spring.profiles.active=ci --testweave.allow-private=true'
+```
+
+대상 목록을 `application-ci.properties`가 아니라 파일에 두는 이유는 이 저장소가 공개라
+업무 대상 URL을 커밋할 수 없기 때문이다. 저장소에는 `targets.sample.txt`만 남는다.
+
+`testweave.allow-private`는 기본 `false`다. 켜는 순간 이 프로세스는 내부망에 요청을 대신
+보내 주는 통로가 되므로, 자기 자산을 아는 사람이 자기 환경에서 켜는 스위치로 둔다.
+**켜도 링크로컬(169.254/16)은 막힌다.** 클라우드 메타데이터 엔드포인트가 거기 있고,
+그건 내부 자산 점검과 무관하면서 인스턴스 자격증명을 흘린다. 켜져 있으면 기동할 때마다
+경고가 뜬다.
+
+결과는 GitHub Actions 실행 페이지 상단에 요약 표로 바로 나온다. 자세한 내용은
+`scan-report` 아티팩트.
+
 **로드맵:**
 - [ ] `AuthCheck` — 보호 엔드포인트가 무인증 시 401/403을 반환하는지(인가 회귀)
 - [ ] Slack 알림 (현재는 워크플로우 실패 → GitHub 기본 알림)

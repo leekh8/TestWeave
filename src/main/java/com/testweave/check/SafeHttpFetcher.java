@@ -1,5 +1,6 @@
 package com.testweave.check;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -39,14 +40,24 @@ public class SafeHttpFetcher {
     }
 
     private final Transport transport;
+    private final ScanPolicy policy;
 
-    public SafeHttpFetcher() {
+    // 생성자가 셋(운영용, 테스트 seam 둘)이라 어느 것으로 주입할지 명시해야 한다.
+    // 안 붙이면 스프링이 기본 생성자를 찾다가 기동에 실패한다.
+    @Autowired
+    public SafeHttpFetcher(ScanPolicy policy) {
         this.transport = realTransport();
+        this.policy = policy;
     }
 
-    /** 테스트용 — 네트워크 없이 리다이렉트 추적·차단 로직을 검증하기 위한 주입 생성자. */
+    /** 테스트용. 네트워크 없이 리다이렉트 추적과 차단 로직을 검증하기 위한 주입 생성자. */
     SafeHttpFetcher(Transport transport) {
+        this(transport, new ScanPolicy());
+    }
+
+    SafeHttpFetcher(Transport transport, ScanPolicy policy) {
         this.transport = transport;
+        this.policy = policy;
     }
 
     /** 리다이렉트를 SsrfGuard로 검증하며 따라간 최종 응답의 헤더. */
@@ -54,7 +65,7 @@ public class SafeHttpFetcher {
             throws IOException, InterruptedException, SsrfBlockedException {
         String current = url;
         for (int hop = 0; hop <= MAX_REDIRECTS; hop++) {
-            String block = SsrfGuard.blockReason(current);
+            String block = SsrfGuard.blockReason(current, policy.allowPrivate());
             if (block != null) {
                 throw new SsrfBlockedException(block);
             }

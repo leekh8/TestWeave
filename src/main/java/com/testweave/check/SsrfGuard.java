@@ -19,8 +19,28 @@ public final class SsrfGuard {
     private SsrfGuard() {
     }
 
-    /** 차단 사유를 반환. 허용되면 null. */
+    /**
+     * 사설 대역을 허용한 상태로 차단 사유를 반환. 허용되면 null.
+     *
+     * <p>사내 자산을 점검하려면 사설 대역을 열어야 하는데, 여는 순간 이 스캐너는
+     * 내부망에 요청을 대신 쏴 주는 프록시가 된다. 그래서 두 가지는 열어도 남긴다.
+     * <ul>
+     *   <li>링크로컬(169.254/16)은 <b>항상</b> 막는다. 클라우드 메타데이터 엔드포인트가
+     *       여기 있고, 그건 내부 자산 점검과 아무 상관이 없으면서 자격증명을 흘린다.</li>
+     *   <li>와일드카드와 멀티캐스트도 항상 막는다. 점검 대상이 될 수 없는 주소다.</li>
+     * </ul>
+     * 완화는 공개 CI에서 켜면 안 된다. 자기 자산을 아는 사람이 손으로 켜는 스위치다.
+     */
+    public static String blockReason(String url, boolean allowPrivate) {
+        return blockReasonInternal(url, allowPrivate);
+    }
+
+    /** 차단 사유를 반환. 허용되면 null. 기본은 사설 대역 전면 차단이다. */
     public static String blockReason(String url) {
+        return blockReasonInternal(url, false);
+    }
+
+    private static String blockReasonInternal(String url, boolean allowPrivate) {
         URI uri;
         try {
             uri = URI.create(url);
@@ -43,19 +63,29 @@ public final class SsrfGuard {
         }
         // 한 호스트가 여러 주소로 해석될 수 있으므로 모두 검사(하나라도 내부면 차단)
         for (InetAddress addr : addresses) {
-            if (isBlockedAddress(addr)) {
+            if (isBlockedAddress(addr, allowPrivate)) {
                 return "내부/사설 대상 차단: " + host + " → " + addr.getHostAddress();
             }
         }
         return null;
     }
 
-    /** 루프백·사설·링크로컬·와일드카드·멀티캐스트 주소를 내부로 간주해 차단. */
+    /** 루프백, 사설, 링크로컬, 와일드카드, 멀티캐스트 주소를 내부로 간주해 차단. */
     static boolean isBlockedAddress(InetAddress addr) {
-        return addr.isLoopbackAddress()      // 127.0.0.0/8, ::1
-                || addr.isAnyLocalAddress()  // 0.0.0.0, ::
-                || addr.isLinkLocalAddress() // 169.254.0.0/16(메타데이터 169.254.169.254 포함), fe80::
-                || addr.isSiteLocalAddress() // 10/8, 172.16/12, 192.168/16, fec0::
-                || addr.isMulticastAddress();
+        return isBlockedAddress(addr, false);
+    }
+
+    static boolean isBlockedAddress(InetAddress addr, boolean allowPrivate) {
+        // 완화해도 뚫리지 않는 것들. 링크로컬에 클라우드 메타데이터(169.254.169.254)가 있다.
+        if (addr.isAnyLocalAddress()          // 0.0.0.0, ::
+                || addr.isLinkLocalAddress()  // 169.254.0.0/16, fe80::
+                || addr.isMulticastAddress()) {
+            return true;
+        }
+        if (allowPrivate) {
+            return false;
+        }
+        return addr.isLoopbackAddress()       // 127.0.0.0/8, ::1
+                || addr.isSiteLocalAddress(); // 10/8, 172.16/12, 192.168/16, fec0::
     }
 }
