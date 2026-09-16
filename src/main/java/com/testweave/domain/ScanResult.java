@@ -36,6 +36,15 @@ public class ScanResult {
 
     private LocalDateTime scannedAt = LocalDateTime.now();
 
+    /**
+     * 한 번의 스캔을 묶는 식별자. 규칙 소멸(MISSING)을 "직전 스캔에 있었는가"로 판정하려면
+     * 어느 행들이 같은 회차인지 알아야 한다. 타임스탬프는 행마다 밀리초가 달라 묶이지 않는다.
+     *
+     * <p>이 컬럼이 생기기 전 행은 null이다. 그 행들은 직전 회차가 될 수 없으므로 자연히
+     * 판정에서 빠진다. 폐기된 옛 규칙명이 영원히 소멸로 잡히던 문제가 이걸로 끝난다.
+     */
+    private String scanId;
+
     public ScanResult(SecurityTarget target, String checkType, String rule, String status, String detail) {
         this.target = target;
         this.checkType = checkType;

@@ -51,9 +51,17 @@ class ScanServiceMissingTest {
         return targetRepo.save(new SecurityTarget("t", "https://example.com", "HEADER"));
     }
 
+    /** 직전 회차(어제)에 측정된 규칙. 같은 scanId로 묶는다. */
     private void seedBaseline(SecurityTarget t, String rule, String status) {
+        seedScan(t, rule, status, "scan-yesterday", 1);
+    }
+
+    /** 특정 회차에 속한 행 하나. */
+    private void seedScan(SecurityTarget t, String rule, String status,
+                          String scanId, int daysAgo) {
         ScanResult r = new ScanResult(t, "HEADER", rule, status, "");
-        r.setScannedAt(LocalDateTime.now().minusDays(1));
+        r.setScannedAt(LocalDateTime.now().minusDays(daysAgo));
+        r.setScanId(scanId);
         resultRepo.save(r);
     }
 
@@ -110,6 +118,38 @@ class ScanServiceMissingTest {
 
         assertEquals("REGRESSION", got.get("HSTS 적용").verdict(), "후퇴는 조치 대상이 설정이다");
         assertEquals("MISSING", got.get("CSP 적용").verdict(), "소멸은 먼저 왜 못 쟀는지를 본다");
+    }
+
+    @Test
+    void 오래전에_폐기된_규칙명은_소멸로_잡지_않는다() {
+        SecurityTarget t = seedTarget();
+        // 석 달 전 회차. 그때는 규칙명에 만료 일수를 박아서 매일 이름이 달라졌다.
+        seedScan(t, "인증서 만료 임박(58일)", "PASS", "scan-old", 90);
+        // 직전 회차는 이름이 고정된 뒤다.
+        seedBaseline(t, "인증서 만료", "PASS");
+
+        SecurityCheck now = new StubCheck("HEADER", List.of(CheckOutcome.pass("인증서 만료")));
+
+        List<Regression> got = service(now).scan(t.getId());
+
+        assertTrue(got.stream().noneMatch(r -> "MISSING".equals(r.verdict())),
+                "이미 폐기된 이름이 매 실행마다 소멸로 잡히면 게이트가 영원히 빨간불이다");
+        assertEquals(1, got.size());
+    }
+
+    @Test
+    void scanId가_없는_옛_행은_직전_회차로_치지_않는다() {
+        SecurityTarget t = seedTarget();
+        // 이 컬럼이 생기기 전에 쌓인 행
+        ScanResult legacy = new ScanResult(t, "HEADER", "옛 규칙", "PASS", "");
+        legacy.setScannedAt(LocalDateTime.now().minusDays(2));
+        resultRepo.save(legacy);
+
+        SecurityCheck now = new StubCheck("HEADER", List.of(CheckOutcome.pass("HSTS 적용")));
+
+        List<Regression> got = service(now).scan(t.getId());
+
+        assertTrue(got.stream().noneMatch(r -> "MISSING".equals(r.verdict())));
     }
 
     @Test

@@ -16,6 +16,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -45,6 +46,10 @@ public class ScanService {
         // 직전 스캔의 (checkType,rule)별 상태 = baseline (새 결과 저장 전에 먼저 읽는다)
         Map<String, String> baseline = latestStatusByKey(targetId);
 
+        // 직전 회차에 어떤 규칙이 있었는지. 소멸 판정의 기준이 된다.
+        Set<String> previousKeys = keysOfLastScan(targetId);
+
+        String scanId = UUID.randomUUID().toString();
         List<Regression> regressions = new ArrayList<>();
         Set<String> seen = new HashSet<>();
         for (String rawType : target.getCheckTypes().split(",")) {
@@ -53,7 +58,9 @@ public class ScanService {
                 continue; // 알 수 없는 모듈은 건너뜀
             }
             for (CheckOutcome o : check.run(target)) {
-                resultRepo.save(new ScanResult(target, check.type(), o.rule(), o.status(), o.detail()));
+                ScanResult row = new ScanResult(target, check.type(), o.rule(), o.status(), o.detail());
+                row.setScanId(scanId);
+                resultRepo.save(row);
                 String k = key(check.type(), o.rule());
                 seen.add(k);
                 String prev = baseline.get(k);
@@ -69,11 +76,15 @@ public class ScanService {
         // NEW로 붙는다. REGRESSION은 0이고 예외도 안 새서 CI가 초록불로 통과한다.
         // 즉 "전부 정상"과 "사이트가 죽었다"가 같은 모양으로 보인다.
         //
-        // 소멸을 REGRESSION에 합치지 않고 MISSING으로 따로 두는 이유: PASS→FAIL(후퇴)과
+        // 소멸을 REGRESSION에 합치지 않고 MISSING으로 따로 두는 이유: PASS에서 FAIL(후퇴)과
         // 규칙이 사라진 것(관측 불가)은 조치가 다르다. 전자는 설정을 되돌리는 문제고
         // 후자는 먼저 왜 못 쟀는지를 봐야 한다.
+        //
+        // 기준은 "직전 회차에 있었는가"다. "과거 언젠가 있었는가"로 잡으면 오래전에 이름이
+        // 바뀌어 폐기된 규칙이 영원히 소멸로 남는다(실측: 규칙명에 만료 일수를 박던 시절의
+        // 행 13개가 매 실행마다 소멸로 잡혀 게이트를 계속 실패시켰다).
         for (Map.Entry<String, String> e : baseline.entrySet()) {
-            if (seen.contains(e.getKey())) {
+            if (seen.contains(e.getKey()) || !previousKeys.contains(e.getKey())) {
                 continue;
             }
             String[] parts = e.getKey().split("\\|", 2);
@@ -94,6 +105,27 @@ public class ScanService {
      */
     private static String key(String checkType, String rule) {
         return checkType + "|" + rule;
+    }
+
+    /**
+     * 직전 회차에 실제로 측정된 규칙 키. scanId가 없는 옛 행은 회차를 알 수 없으므로 뺀다.
+     */
+    Set<String> keysOfLastScan(Long targetId) {
+        String lastScanId = null;
+        Set<String> keys = new HashSet<>();
+        // 최신순 정렬이므로 첫 행의 scanId가 직전 회차다.
+        for (ScanResult r : resultRepo.findByTargetIdOrderByScannedAtDescIdDesc(targetId)) {
+            if (r.getScanId() == null) {
+                continue;
+            }
+            if (lastScanId == null) {
+                lastScanId = r.getScanId();
+            }
+            if (lastScanId.equals(r.getScanId())) {
+                keys.add(key(r.getCheckType(), r.getRule()));
+            }
+        }
+        return keys;
     }
 
     Map<String, String> latestStatusByKey(Long targetId) {
