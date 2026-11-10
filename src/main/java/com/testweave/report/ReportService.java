@@ -53,6 +53,9 @@ public class ReportService {
         ctx.setVariable("totalFails", sorted.stream().mapToLong(TargetReport::countFail).sum());
         ctx.setVariable("totalErrors", sorted.stream().filter(TargetReport::hasError).count());
         ctx.setVariable("totalMissing", sorted.stream().mapToLong(TargetReport::countMissing).sum());
+        ctx.setVariable("totalAccepted", sorted.stream().mapToLong(TargetReport::countAccepted).sum());
+        ctx.setVariable("totalExpired", sorted.stream().mapToLong(TargetReport::countExpired).sum());
+        ctx.setVariable("totalDueSoon", sorted.stream().mapToLong(TargetReport::countDueSoon).sum());
         return engine.process("report", ctx);
     }
 
@@ -60,13 +63,14 @@ public class ReportService {
         return reports.stream().mapToLong(r -> r.countVerdict(verdict)).sum();
     }
 
-    /** 회귀 보유 → 규칙 소멸 → 스캔 오류 → 실패 보유 → 나머지 순. */
+    /** 회귀 보유, 규칙 소멸, 스캔 오류, 수용 만료, 미충족 보유, 나머지 순. */
     private static int targetRank(TargetReport t) {
         if (t.countVerdict("REGRESSION") > 0) return 0;
         if (t.countMissing() > 0) return 1;   // 대상이 통째로 안 잡힌 신호
         if (t.hasError()) return 2;
-        if (t.countFail() > 0) return 3;
-        return 4;
+        if (t.countExpired() > 0) return 3;   // 다시 보기로 한 날이 지났다
+        if (t.countFail() > 0) return 4;
+        return 5;
     }
 
     /** 대상 내 판정 행을 REGRESSION → MISSING → FAIL → NEW → FIXED → SAME 순으로 정렬한 새 리포트. */
@@ -80,10 +84,12 @@ public class ReportService {
 
     private static int rowRank(Regression r) {
         if ("REGRESSION".equals(r.verdict())) return 0;
-        if ("MISSING".equals(r.verdict())) return 1; // 직전엔 쟀는데 이번엔 못 잰 규칙
-        if ("FAIL".equals(r.current())) return 2;    // 회귀는 아니나 현재 미충족
-        if ("NEW".equals(r.verdict())) return 3;
-        if ("FIXED".equals(r.verdict())) return 4;
-        return 5;                                    // SAME / PASS
+        if ("MISSING".equals(r.verdict())) return 1;  // 직전엔 쟀는데 이번엔 못 잰 규칙
+        if (r.acceptanceExpired()) return 2;          // 다시 보기로 한 날이 지났다
+        if (r.actionableFail()) return 3;             // 회귀는 아니나 지금 조치해야 하는 미충족
+        if ("NEW".equals(r.verdict())) return 4;
+        if (r.accepted()) return 5;                   // 알고 있고 기한 안. 맨 아래로 내린다
+        if ("FIXED".equals(r.verdict())) return 6;
+        return 7;                                     // SAME / PASS
     }
 }

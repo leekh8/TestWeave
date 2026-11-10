@@ -2,6 +2,7 @@ package com.testweave.service;
 
 import com.testweave.check.CheckOutcome;
 import com.testweave.check.SecurityCheck;
+import com.testweave.scan.AcceptanceRegistry;
 import com.testweave.domain.ScanResult;
 import com.testweave.domain.SecurityTarget;
 import com.testweave.repository.ScanResultRepository;
@@ -30,6 +31,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @DataJpaTest
 class ScanServiceMissingTest {
 
+    /** 수용 등록부 없는 상태. 수용 동작은 AcceptanceRegistryTest가 따로 본다. */
+    private static AcceptanceRegistry emptyRegistry() {
+        AcceptanceRegistry r = new AcceptanceRegistry();
+        r.configure(java.util.List.of(), 365);
+        return r;
+    }
+
+
     @Autowired
     SecurityTargetRepository targetRepo;
     @Autowired
@@ -44,7 +53,7 @@ class ScanServiceMissingTest {
     }
 
     private ScanService service(SecurityCheck... checks) {
-        return new ScanService(targetRepo, resultRepo, List.of(checks));
+        return new ScanService(targetRepo, resultRepo, List.of(checks), emptyRegistry());
     }
 
     private SecurityTarget seedTarget() {

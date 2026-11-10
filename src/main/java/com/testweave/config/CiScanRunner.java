@@ -5,6 +5,7 @@ import com.testweave.domain.SecurityTarget;
 import com.testweave.report.ReportService;
 import com.testweave.report.TargetReport;
 import com.testweave.repository.SecurityTargetRepository;
+import com.testweave.scan.AcceptanceRegistry;
 import com.testweave.scan.Regression;
 import com.testweave.service.ScanService;
 import org.springframework.beans.factory.annotation.Value;
@@ -37,6 +38,7 @@ public class CiScanRunner implements CommandLineRunner {
     private final SecurityTargetRepository targetRepo;
     private final ScanService scanService;
     private final ReportService reportService;
+    private final AcceptanceRegistry acceptances;
 
     @Value("${testweave.ci.targets:}")
     private String targets;          // 콤마 구분 URL 목록
@@ -62,10 +64,12 @@ public class CiScanRunner implements CommandLineRunner {
 
     public CiScanRunner(SecurityTargetRepository targetRepo,
                         ScanService scanService,
-                        ReportService reportService) {
+                        ReportService reportService,
+                        AcceptanceRegistry acceptances) {
         this.targetRepo = targetRepo;
         this.scanService = scanService;
         this.reportService = reportService;
+        this.acceptances = acceptances;
     }
 
     @Override
@@ -77,6 +81,7 @@ public class CiScanRunner implements CommandLineRunner {
                     + "testweave.ci.targets 를 지정하세요 (targets.sample.txt 참고).");
         }
 
+        acceptances.resetUsage();
         List<TargetReport> reports = new ArrayList<>();
         for (String url : urls) {
             try {
@@ -102,6 +107,9 @@ public class CiScanRunner implements CommandLineRunner {
         long fails = reports.stream().mapToLong(TargetReport::countFail).sum();
         long errors = reports.stream().filter(TargetReport::hasError).count();
         long missing = reports.stream().mapToLong(TargetReport::countMissing).sum();
+        long accepted = reports.stream().mapToLong(TargetReport::countAccepted).sum();
+        long expired = reports.stream().mapToLong(TargetReport::countExpired).sum();
+        long dueSoon = reports.stream().mapToLong(TargetReport::countDueSoon).sum();
 
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("generatedAt", now.toString());
@@ -112,14 +120,39 @@ public class CiScanRunner implements CommandLineRunner {
         summary.put("fails", fails);
         summary.put("errors", errors);
         summary.put("missing", missing);
+        summary.put("accepted", accepted);
+        summary.put("expired", expired);
+        summary.put("dueSoon", dueSoon);
         Files.writeString(dir.resolve("summary.json"),
                 new ObjectMapper().writeValueAsString(summary), StandardCharsets.UTF_8);
 
         System.out.printf("%n=== TestWeave CI 스캔 완료: 대상 %d / 규칙 %d ===%n", urls.size(), totalRules);
         System.out.printf("  REGRESSION=%d  MISSING=%d  FIXED=%d  FAIL=%d  ERROR=%d%n",
                 regressions, missing, fixed, fails, errors);
+        System.out.printf("  수용=%d (만료=%d, 기한임박=%d)%n", accepted, expired, dueSoon);
+        reportUnusedAcceptances();
         System.out.println("  리포트: " + dir.resolve("scan-report.html").toAbsolutePath());
-        writeStepSummary(urls.size(), totalRules, regressions, missing, fixed, fails, errors);
+        writeStepSummary(urls.size(), totalRules, regressions, missing, fixed, fails, errors,
+                accepted, expired);
+    }
+
+    /**
+     * 이번 회차에 한 번도 쓰이지 않은 수용 등록부 줄을 알린다.
+     *
+     * <p>규칙명이 바뀌었거나 대상에서 빠졌거나 이미 고쳐졌는데 줄만 남은 경우다.
+     * 등록부는 정확히 이렇게 썩는다. 안 쓰이는 줄이 쌓이면 아무도 안 읽게 되고,
+     * 그때부터 등록부는 있으나 마나다. 실패로 끌고 가지는 않는다. 규칙명 변경 직후처럼
+     * 정상적으로 한 회차 비는 경우가 있어서, 여기서 막으면 우회가 습관이 된다.
+     */
+    private void reportUnusedAcceptances() {
+        List<AcceptanceRegistry.Entry> unused = acceptances.unusedEntries();
+        if (unused.isEmpty()) {
+            return;
+        }
+        System.out.printf("  [주의] 이번 회차에 쓰이지 않은 수용 %d건 (정리 대상)%n", unused.size());
+        for (AcceptanceRegistry.Entry e : unused) {
+            System.out.printf("    - %s / %s / %s%n", e.url(), e.checkType(), e.rule());
+        }
     }
 
     /** 대상 목록. 파일이 있으면 파일, 없으면 properties. */
@@ -147,7 +180,8 @@ public class CiScanRunner implements CommandLineRunner {
      * 아니라서 결국 아무도 안 본다.
      */
     private void writeStepSummary(long targets, long rules, long regressions,
-                                  long missing, long fixed, long fails, long errors) {
+                                  long missing, long fixed, long fails, long errors,
+                                  long accepted, long expired) {
         String path = System.getenv("GITHUB_STEP_SUMMARY");
         if (path == null || path.isBlank()) {
             // 로컬 실행. 콘솔 출력으로 충분하다. 다만 CI에서 이 줄이 찍히면
@@ -157,7 +191,8 @@ public class CiScanRunner implements CommandLineRunner {
         }
         try {
             Files.writeString(Path.of(path),
-                    stepSummaryMarkdown(targets, rules, regressions, missing, fixed, fails, errors),
+                    stepSummaryMarkdown(targets, rules, regressions, missing, fixed, fails, errors,
+                            accepted, expired),
                     StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
             System.out.println("  요약 기록: " + path);
         } catch (IOException e) {
@@ -173,27 +208,38 @@ public class CiScanRunner implements CommandLineRunner {
      * 숫자가 그럴듯해서 눈으로는 안 걸린다. 값을 서로 다르게 준 테스트만 잡는다.
      */
     static String stepSummaryMarkdown(long targets, long rules, long regressions,
-                                      long missing, long fixed, long fails, long errors) {
+                                      long missing, long fixed, long fails, long errors,
+                                      long accepted, long expired) {
         String verdict;
         if (regressions > 0 || missing > 0 || errors > 0) {
-            verdict = "🛑 조치 필요";
+            verdict = "조치 필요";
+        } else if (expired > 0) {
+            // 수용 기한이 지났다. 다시 보기로 한 날이 왔는데 아무도 안 봤다는 뜻이라
+            // 단순 미충족보다 먼저 쓴다. 기한이 있는 수용만 수용이다.
+            verdict = "수용 기한 만료 " + expired + "건";
         } else if (fails > 0) {
             // 회귀는 아니지만 계속 미충족인 상태. 게이트는 통과시키되 "이상 없음"이라고
             // 쓰지는 않는다. 8건이 깨진 채로 초록불을 보는 것이 무감각을 만든다.
-            verdict = "⚠️ 미충족 " + fails + "건";
+            verdict = "미충족 " + fails + "건";
+        } else if (accepted > 0) {
+            // 조치할 것은 없지만 수용분이 있다. 이것까지 "이상 없음"으로 뭉치면
+            // 수용해 둔 항목이 시야에서 사라진다.
+            verdict = "이상 없음 (수용 " + accepted + "건)";
         } else {
-            verdict = "✅ 이상 없음";
+            verdict = "이상 없음";
         }
         return """
                 ## TestWeave %s
 
-                | 대상 | 규칙 | REGRESSION | MISSING | FAIL | FIXED | 오류 |
-                |---:|---:|---:|---:|---:|---:|---:|
-                | %d | %d | %d | %d | %d | %d | %d |
+                | 대상 | 규칙 | REGRESSION | MISSING | 미충족 | 수용 | 수용만료 | FIXED | 오류 |
+                |---:|---:|---:|---:|---:|---:|---:|---:|---:|
+                | %d | %d | %d | %d | %d | %d | %d | %d | %d |
 
                 REGRESSION = 직전 PASS에서 이번 FAIL. MISSING = 직전엔 쟀는데 이번 결과에 없음(대상 불통 신호).
+                미충족 = 지금 조치가 필요한 FAIL(기한 내 수용분 제외). 수용만료 = 다시 보기로 한 날이 지난 항목.
                 자세한 내용은 아래 `scan-report` 아티팩트.
-                """.formatted(verdict, targets, rules, regressions, missing, fails, fixed, errors);
+                """.formatted(verdict, targets, rules, regressions, missing, fails, accepted,
+                        expired, fixed, errors);
     }
 
     private static String hostOf(String url) {

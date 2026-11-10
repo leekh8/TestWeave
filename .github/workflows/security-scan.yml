@@ -54,21 +54,37 @@ jobs:
       #
       # missing(규칙 소멸)을 게이트에 넣는 이유: 대상이 다운되면 개별 규칙이 결과에서
       # 사라질 뿐 REGRESSION도 ERROR도 0이라 그냥 두면 초록불로 통과한다.
+      #
+      # expired(수용 기한 만료)도 게이트에 넣는다. 상시 FAIL과 달리 이건 "언제까지
+      # 다시 보겠다"고 적어 둔 날짜가 지났다는 뜻이다. 약속에 날짜를 붙여 놓고
+      # 그 날이 지나도 아무 일이 없으면, 날짜를 적는 의미가 없어진다.
       - name: Fail on regression
         env:
-          FAIL_ON: regression   # regression(기본) | fail(상시 FAIL도 빌드 실패)
+          FAIL_ON: regression      # regression(기본) | fail(상시 FAIL도 빌드 실패)
+          FAIL_ON_EXPIRED: "true"  # 수용 기한 만료를 실패로 볼지
         run: |
           regressions=$(jq -r '.regressions' reports/summary.json)
           errors=$(jq -r '.errors' reports/summary.json)
           fails=$(jq -r '.fails' reports/summary.json)
           missing=$(jq -r '.missing // 0' reports/summary.json)
+          accepted=$(jq -r '.accepted // 0' reports/summary.json)
+          expired=$(jq -r '.expired // 0' reports/summary.json)
+          dueSoon=$(jq -r '.dueSoon // 0' reports/summary.json)
           echo "REGRESSION=$regressions MISSING=$missing FAIL=$fails ERROR=$errors (gate=$FAIL_ON)"
+          echo "수용=$accepted 만료=$expired 기한임박=$dueSoon"
           bad=0
           [ "$regressions" != "0" ] && bad=1
           [ "$missing" != "0" ] && bad=1
           [ "$errors" != "0" ] && bad=1
           [ "$FAIL_ON" = "fail" ] && [ "$fails" != "0" ] && bad=1
+          [ "$FAIL_ON_EXPIRED" = "true" ] && [ "$expired" != "0" ] && bad=1
+          if [ "$dueSoon" != "0" ]; then
+            echo "::warning::수용 기한 임박 ${dueSoon}건. 만료되고 나서 아는 것보다 미리 보는 편이 낫다"
+          fi
+          if [ "$expired" != "0" ]; then
+            echo "::error::수용 기한 만료 ${expired}건. exceptions.txt에서 조치하거나 기한을 갱신하라"
+          fi
           if [ "$bad" != "0" ]; then
-            echo "::error::회귀 $regressions건 / 규칙소멸 $missing건 / 상시FAIL $fails건 / 스캔오류 $errors건 (gate=$FAIL_ON). 리포트 아티팩트 확인"
+            echo "::error::회귀 $regressions건 / 규칙소멸 $missing건 / 상시FAIL $fails건 / 스캔오류 $errors건 / 수용만료 $expired건 (gate=$FAIL_ON). 리포트 아티팩트 확인"
             exit 1
           fi

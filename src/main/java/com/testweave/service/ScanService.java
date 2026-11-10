@@ -7,10 +7,13 @@ import com.testweave.domain.SecurityTarget;
 import com.testweave.exception.TargetNotFoundException;
 import com.testweave.repository.ScanResultRepository;
 import com.testweave.repository.SecurityTargetRepository;
+import com.testweave.scan.Acceptance;
+import com.testweave.scan.AcceptanceRegistry;
 import com.testweave.scan.Regression;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -28,12 +31,15 @@ public class ScanService {
     private final SecurityTargetRepository targetRepo;
     private final ScanResultRepository resultRepo;
     private final Map<String, SecurityCheck> checks;
+    private final AcceptanceRegistry acceptances;
 
     public ScanService(SecurityTargetRepository targetRepo,
                        ScanResultRepository resultRepo,
-                       List<SecurityCheck> checkList) {
+                       List<SecurityCheck> checkList,
+                       AcceptanceRegistry acceptances) {
         this.targetRepo = targetRepo;
         this.resultRepo = resultRepo;
+        this.acceptances = acceptances;
         this.checks = checkList.stream()
                 .collect(Collectors.toMap(SecurityCheck::type, Function.identity()));
     }
@@ -92,7 +98,24 @@ public class ScanService {
             String rule = parts.length > 1 ? parts[1] : "";
             regressions.add(new Regression(checkType, rule, e.getValue(), MISSING, MISSING));
         }
-        return regressions;
+        return applyAcceptances(target.getUrl(), regressions);
+    }
+
+    /**
+     * 위험 수용 등록부를 판정에 입힌다.
+     *
+     * <p>판정 자체는 건드리지 않는다. FAIL은 수용해도 FAIL이다. 바뀌는 것은 "지금 조치해야
+     * 하는가"뿐이고, 그래서 수용은 회귀나 소멸에는 적용되지 않는다. 그쪽은 상태가 바뀐 것이라
+     * 수용의 전제("지금 상태를 알고 있다")가 이미 깨졌다.
+     */
+    private List<Regression> applyAcceptances(String url, List<Regression> rows) {
+        LocalDate today = LocalDate.now();
+        List<Regression> out = new ArrayList<>(rows.size());
+        for (Regression r : rows) {
+            Acceptance a = acceptances.decide(url, r, today);
+            out.add(a == null ? r : r.withAcceptance(a));
+        }
+        return out;
     }
 
     /** 직전엔 있었는데 이번 스캔에서 사라진 규칙. current 상태이자 verdict로 함께 쓴다. */

@@ -26,6 +26,7 @@ TestWeave는 대상별 점검 결과를 저장하고, 매 스캔을 직전 결�
 - **회귀 판정** — 스캔 결과를 직전 baseline과 비교해 `NEW/REGRESSION/FIXED/SAME` 산출 (`POST /api/targets/{id}/scan`)
 - **HTML 리포트** — `REGRESSION` 강조 리포트 (`POST /api/targets/{id}/report`, ci 모드는 `reports/scan-report.html` 파일 생성)
 - **정기 회귀 (GitHub Actions)** — `ci` 프로파일: 서버 없이 스캔→리포트 파일→종료. baseline은 H2 파일 DB를 actions/cache로 실행 간 유지. 매일 06:20 KST 스케줄, `REGRESSION`/스캔 오류 시 워크플로우 실패 → GitHub 기본 알림. `FAIL_ON=fail`로 두면 회귀가 아닌 **상시 FAIL**(신규 대상이 첫날부터 미충족 등)도 빌드 실패로 승격
+- **위험 수용 등록부** - 고칠 수 없는 항목을 사유와 기한을 적어 `exceptions.txt`에 등록하면 기한까지 미충족 집계에서 빠진다. **회귀와 소멸은 수용할 수 없다.** 만료되면 자동으로 미충족 복귀 + 별도 판정. 아래 절 참고
 - **데모 실행** — `demo` 프로파일로 띄우면 샘플 대상을 스캔해 회귀 판정을 콘솔에 출력
 
 **실제로 쓰려면:**
@@ -58,6 +59,51 @@ cp targets.sample.txt targets.local.txt
 - [ ] Slack 알림 (현재는 워크플로우 실패 → GitHub 기본 알림)
 - [ ] 운영 DB(PostgreSQL) 프로파일 분리 + 서버 상시 배포
 - [ ] OWASP ZAP(DAST) 연동으로 실제 취약점 스캔까지 확장
+
+## 위험 수용 등록부
+
+고칠 방법이 없는 항목이 매일 같은 숫자로 경고에 남으면, 사람은 그 경고를 안 보게 된다.
+그리고 진짜 회귀가 같은 화면에 섞여 들어온다. 등록부는 이 문제를 푼다.
+
+실제 사례가 이 저장소의 CI 대상이다. `https://leekh8.github.io`는 GitHub Pages라
+커스텀 응답 헤더를 붙일 수 없어서 헤더 4건이 매일 FAIL이었다. 15회 연속 같은 값이었고,
+그동안 알림은 0건이었다.
+
+```
+# exceptions.txt  (대상URL | 모듈 | 규칙 | 기한 | 사유)
+https://leekh8.github.io | HEADER | CSP 적용 | 2026-12-31 | GitHub Pages는 커스텀 응답 헤더를 지원하지 않는다
+```
+
+```
+# 등록 전                                   # 등록 후
+REGRESSION=0 MISSING=0 FAIL=4 ERROR=0      REGRESSION=0 MISSING=0 FAIL=0 ERROR=0
+                                           수용=4 (만료=0, 기한임박=0)
+```
+
+**지키는 선**
+
+| 규칙 | 이유 |
+|---|---|
+| 회귀와 소멸은 수용 불가 | 수용은 "지금 상태를 안다"는 선언인데 회귀는 상태가 바뀐 것이라 전제가 깨진다. 등록해 둬도 "수용 무효"로 표시만 된다 |
+| 기한 필수, 상한 1년 | 무기한 수용은 잊힌 수용과 구별되지 않는다. 먼 날짜는 무기한 우회다 |
+| 사유 필수 | 없으면 기동 실패. 다음 사람이 판단을 이어받을 수 없는 기록은 수용이 아니라 방치다 |
+| 형식 오류는 기동 실패 | 조용히 넘기면 오타 하나로 수용이 사라지거나 엉뚱한 규칙에 붙는다 |
+| 만료는 삭제가 아니라 표면화 | 지난 기한도 파싱은 통과시키고 "수용 만료"로 따로 보여준다 |
+| 안 쓰인 줄을 보고 | 규칙명이 바뀌었는데 줄만 남는 식으로 등록부는 썩는다. 매 회차 정리 대상을 출력한다 |
+
+수용해도 판정과 상태는 그대로 `FAIL`이다. 바뀌는 것은 "지금 조치해야 하는가"뿐이다.
+
+`exceptions.txt`는 일부러 저장소에 커밋한다. 누가 언제 무엇을 왜 수용했는지가 git 이력에
+남아야 감사 증적이 된다. 공개할 수 없는 업무 대상은 `exceptions.local.txt`에 두면
+그쪽이 이긴다(gitignore 대상).
+
+관련 설정:
+
+| 키 | 기본값 | 의미 |
+|---|---|---|
+| `testweave.exceptions-file` | `exceptions.txt` | 등록부 경로 |
+| `testweave.exceptions-local-file` | `exceptions.local.txt` | 있으면 이쪽이 이긴다 |
+| `testweave.exceptions-max-days` | `365` | 기한 상한(일) |
 
 ## Stack
 
@@ -113,6 +159,8 @@ src/main/java/com/testweave/
     HeaderCheck.java / CookieCheck.java / TlsCheck.java
   scan/
     Regression.java                  # 회귀 판정 결과 (record)
+    Acceptance.java                  # 위험 수용 판단 (ACTIVE/EXPIRED/REJECTED)
+    AcceptanceRegistry.java          # exceptions.txt 파싱, 적용, 등록부 부패 탐지
   service/
     ScanService.java                 # 스캔 실행 + baseline 대비 회귀 계산
   report/
@@ -128,6 +176,26 @@ src/main/resources/
   templates/report.html              # 리포트 템플릿 (REGRESSION 강조)
   application-ci.properties          # ci 대상/체크 설정 + H2 파일 DB
 .github/workflows/security-scan.yml  # 매일 06:20 KST 스케줄 스캔 + 회귀 시 실패
+tools/browser-probe/probe.py         # 브라우저 점검기(파이썬). 아래 «브라우저 점검층» 참고
 ```
 
 설계 상세는 [`docs/DESIGN.md`](docs/DESIGN.md) 참고.
+
+## 브라우저 점검층 (tools/browser-probe)
+
+본체(Java)는 브라우저를 띄우지 않는다. 헤더만 봐서는 안 보이는 층이 따로 있어서
+파이썬 점검기를 분리해 뒀다.
+
+어떤 결함은 응답 헤더가 전부 정상인데도 렌더된 HTML 에만 있다. 2026-09-17 에 개인
+블로그에서 시리즈 페이지 18개가 전부 canonical 을 홈으로 찍고 있었다. 글 40편으로 가는
+발견 경로가 통째로 끊긴 상태였는데 응답 헤더는 멀쩡했고 소스도 한 줄짜리 컴포넌트
+호출이라 멀쩡해 보였다. 헤더만 보는 스캐너로는 영원히 못 잡는 층이 있다.
+
+```bash
+python tools/browser-probe/probe.py --targets targets.local.txt \
+    --out reports/browser-findings.json
+```
+
+매일 도는 스캔에 브라우저 런타임을 얹지 않기 위해 따로 둔다. 지금은 json 까지만 만들고,
+**본체가 이 결과를 읽어 점검 결과로 흡수하는 배선은 아직이다** (`grep -r browser-findings src`
+가 0건). 회귀 판정과 수용 등록부와 리포트는 본체에 이미 있어서 다시 만들 이유가 없다.

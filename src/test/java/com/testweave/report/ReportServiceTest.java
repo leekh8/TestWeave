@@ -29,7 +29,7 @@ class ReportServiceTest {
         assertTrue(html.contains("HSTS 적용"));
         assertTrue(html.contains("https://leekh8.github.io"));
         assertTrue(html.contains("2026-07-02 06:20:00"));
-        assertTrue(html.contains("class=\"badge REGRESSION\""), "REGRESSION 배지 강조");
+        assertTrue(html.contains("class=\"tag REGRESSION\""), "REGRESSION 태그 강조");
     }
 
     /**
@@ -47,11 +47,12 @@ class ReportServiceTest {
 
         String html = service.render(List.of(report), at);
 
-        assertTrue(html.contains("class=\"badge MISSING\""), "MISSING 배지가 나와야 한다");
-        assertTrue(html.contains(".badge.MISSING"), "배지 스타일이 정의돼 있어야 한다");
-        assertTrue(html.contains("MISSING 2"), "대상 헤더에 소멸 건수를 보여야 한다");
-        assertTrue(html.contains("MISSING (못 잼)"), "요약 KPI에 집계돼야 한다");
-        assertFalse(html.contains(">정상<"), "규칙이 사라진 대상을 정상으로 표시하면 안 된다");
+        assertTrue(html.contains("class=\"tag MISSING\""), "MISSING 태그가 나와야 한다");
+        assertTrue(html.contains(".tag.MISSING"), "태그 스타일이 정의돼 있어야 한다");
+        assertTrue(html.contains("소멸 2"), "대상 헤더에 소멸 건수를 보여야 한다");
+        assertTrue(html.contains(">소멸<"), "요약 계기판에 집계돼야 한다");
+        assertFalse(html.contains(">조치 대상 없음<"),
+                "규칙이 사라진 대상을 조치 대상 없음으로 표시하면 안 된다");
     }
 
     @Test
@@ -61,7 +62,7 @@ class ReportServiceTest {
                 new Regression("HEADER", "HSTS 적용", "PASS", "PASS", "SAME")
         ), null);
 
-        assertTrue(service.render(List.of(report), at).contains(">정상<"));
+        assertTrue(service.render(List.of(report), at).contains(">조치 대상 없음<"));
     }
 
     @Test
@@ -123,7 +124,7 @@ class ReportServiceTest {
 
         String html = service.render(List.of(clean), at);
 
-        assertTrue(html.contains("정상 — 회귀"), "전체 정상 배너 표시");
+        assertTrue(html.contains("조치 대상 없음"), "전체 정상 배너 표시");
     }
 
     @Test

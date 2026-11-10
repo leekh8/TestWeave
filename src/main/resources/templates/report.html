@@ -5,133 +5,246 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>TestWeave 보안 회귀 리포트</title>
     <style>
-        :root { --bg:#0f172a; --card:#1e293b; --text:#e2e8f0; --muted:#94a3b8; --line:#334155; }
-        body { margin:0; padding:24px; background:var(--bg); color:var(--text);
-               font-family:'Segoe UI','Malgun Gothic',sans-serif; }
-        h1 { font-size:1.4rem; margin:0 0 4px; }
-        .sub { color:var(--muted); font-size:.85rem; margin-bottom:20px; }
-        .summary { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:24px; }
-        .kpi { background:var(--card); border:1px solid var(--line); border-radius:10px;
-               padding:12px 18px; min-width:110px; }
-        .kpi .num { font-size:1.5rem; font-weight:700; }
-        .kpi .lbl { color:var(--muted); font-size:.78rem; }
-        .kpi.alert .num { color:#f87171; }
-        .kpi.ok .num { color:#4ade80; }
-        .target { background:var(--card); border:1px solid var(--line); border-radius:10px;
-                  padding:16px 20px; margin-bottom:16px; }
-        .target h2 { font-size:1.05rem; margin:0 0 2px; }
-        .target .url { color:var(--muted); font-size:.82rem; margin-bottom:12px; word-break:break-all; }
-        table { width:100%; border-collapse:collapse; font-size:.86rem; }
-        th, td { text-align:left; padding:7px 10px; border-bottom:1px solid var(--line); }
-        th { color:var(--muted); font-weight:600; font-size:.78rem; }
-        tr.regression { background:rgba(248,113,113,.12); }
-        tr.missing { background:rgba(251,146,60,.12); }
-        .badge { display:inline-block; padding:2px 9px; border-radius:99px;
-                 font-size:.72rem; font-weight:700; }
-        .badge.REGRESSION { background:#7f1d1d; color:#fecaca; }
-        .badge.FIXED { background:#14532d; color:#bbf7d0; }
-        .badge.NEW { background:#1e3a8a; color:#bfdbfe; }
-        .badge.SAME { background:#334155; color:#cbd5e1; }
-        /* 직전엔 쟀는데 이번엔 결과에 없는 규칙. 후퇴(REGRESSION)와 다른 색을 준다.
-           후퇴는 설정을 되돌리는 문제고 소멸은 왜 못 쟀는지부터 보는 문제다. */
-        .badge.MISSING { background:#78350f; color:#fed7aa; }
-        .st-FAIL { color:#f87171; font-weight:700; }
-        .st-PASS { color:#4ade80; }
-        /* 색만으로 PASS/FAIL을 구분하지 않도록 기호 병기 (색맹 접근성) */
+        :root {
+            --bg:#0f1722; --panel:#18222f; --line:#2b3a4c;
+            --text:#dde5ee; --muted:#8fa0b4; --faint:#5d6f84;
+            /* 의미색. 강조색과 분리해 둔다. 심각도는 취향이 아니라 상태다. */
+            --bad:#e5645c; --warn:#d99a3a; --good:#57b877; --info:#6f95c9;
+        }
+        * { box-sizing:border-box; }
+        body { margin:0; padding:28px 24px 40px; background:var(--bg); color:var(--text);
+               font-family:'Segoe UI','Malgun Gothic',sans-serif; line-height:1.55; }
+        .wrap { max-width:1040px; margin:0 auto; }
+        h1 { font-size:1.15rem; font-weight:600; letter-spacing:-.01em; margin:0; }
+        .sub { color:var(--faint); font-size:.78rem; margin:2px 0 22px;
+               font-variant-numeric:tabular-nums; }
+
+        /* 판정 한 줄. 숫자 여섯 개보다 이 문장이 먼저 읽혀야 한다. */
+        .verdict { border-left:3px solid var(--line); padding:10px 0 10px 14px; margin-bottom:22px;
+                   font-size:.95rem; font-weight:600; }
+        .verdict.bad { border-color:var(--bad); color:var(--bad); }
+        .verdict.warn { border-color:var(--warn); color:var(--warn); }
+        .verdict.ok { border-color:var(--good); color:var(--good); }
+        .verdict .why { display:block; font-weight:400; font-size:.8rem;
+                        color:var(--muted); margin-top:3px; }
+
+        /* 계기판. 카드 여러 장이 아니라 한 줄짜리 판독기로 읽히게 한다. */
+        .strip { display:flex; flex-wrap:wrap; border:1px solid var(--line); border-radius:4px;
+                 background:var(--panel); margin-bottom:26px; }
+        .cell { flex:1 1 auto; min-width:104px; padding:11px 16px;
+                border-right:1px solid var(--line); }
+        .cell:last-child { border-right:0; }
+        .cell .num { font-size:1.35rem; font-weight:600; font-variant-numeric:tabular-nums;
+                     line-height:1.2; }
+        .cell .lbl { color:var(--faint); font-size:.72rem; letter-spacing:.02em; }
+        .cell.bad .num { color:var(--bad); }
+        .cell.warn .num { color:var(--warn); }
+        .cell.good .num { color:var(--good); }
+        .cell.quiet .num { color:var(--muted); }
+
+        .target { border:1px solid var(--line); border-radius:4px; background:var(--panel);
+                  padding:16px 18px; margin-bottom:14px; }
+        .target h2 { font-size:.95rem; font-weight:600; margin:0; }
+        .target .url { color:var(--faint); font-size:.76rem; margin:1px 0 12px;
+                       word-break:break-all; }
+
+        table { width:100%; border-collapse:collapse; font-size:.83rem; }
+        th, td { text-align:left; padding:7px 10px 7px 0; border-bottom:1px solid var(--line);
+                 vertical-align:top; }
+        th { color:var(--faint); font-weight:500; font-size:.72rem; letter-spacing:.03em; }
+        td.mod { color:var(--muted); white-space:nowrap; }
+        td.rule { width:46%; }
+        .note { color:var(--muted); font-size:.75rem; margin-top:2px; }
+        .note b { color:var(--text); font-weight:600; }
+
+        tr.act td { background:rgba(229,100,92,.07); }
+        tr.expired td { background:rgba(217,154,58,.07); }
+        /* 수용 중인 행은 조용해야 한다. 알고 있는 것을 매일 다시 경고하면
+           경고 전체가 무뎌지고, 그때 진짜 회귀가 같은 화면에 섞인다. */
+        tr.accepted td { color:var(--faint); }
+        tr.accepted .note { color:var(--faint); }
+
+        .tag { display:inline-block; padding:1px 7px; border-radius:3px; font-size:.7rem;
+               font-weight:600; white-space:nowrap; border:1px solid transparent; }
+        .tag.REGRESSION { background:rgba(229,100,92,.16); color:var(--bad); border-color:var(--bad); }
+        .tag.MISSING { background:rgba(217,154,58,.16); color:var(--warn); border-color:var(--warn); }
+        .tag.FIXED { background:rgba(87,184,119,.14); color:var(--good); }
+        .tag.NEW { background:rgba(111,149,201,.14); color:var(--info); }
+        .tag.SAME { background:transparent; color:var(--faint); border-color:var(--line); }
+        .tag.hold { background:transparent; color:var(--faint); border-style:dashed;
+                    border-color:var(--faint); }
+        .tag.lapsed { background:rgba(217,154,58,.16); color:var(--warn); border-color:var(--warn); }
+        .tag.void { background:rgba(229,100,92,.16); color:var(--bad); border-color:var(--bad); }
+        .tag.unmet { background:rgba(229,100,92,.16); color:var(--bad); border-color:var(--bad); }
+        .tsum { display:flex; gap:6px; flex-wrap:wrap; margin:0 0 12px; }
+
+        .st { font-weight:600; white-space:nowrap; }
+        .st-FAIL { color:var(--bad); }
+        .st-PASS { color:var(--good); font-weight:400; }
+        .st-MISSING { color:var(--warn); }
+        /* 색만으로 상태를 구분하지 않게 기호를 병기한다 (색각 접근성) */
         .st-PASS::before { content:"\2713 "; }
         .st-FAIL::before { content:"\2717 "; }
-        .error { background:rgba(248,113,113,.12); border:1px solid #7f1d1d;
-                 border-radius:8px; padding:10px 14px; font-size:.85rem; word-break:break-all; }
-        .allclear { background:#14532d; color:#bbf7d0; border-radius:10px;
-                    padding:14px 18px; margin-bottom:20px; font-weight:700; }
-        .tsum { margin-bottom:12px; display:flex; gap:6px; flex-wrap:wrap; }
-        .empty { color:var(--muted); font-style:italic; }
-        footer { color:var(--muted); font-size:.75rem; margin-top:20px; }
 
-        /* 인쇄/PDF — 다크 배경을 밝게 강제, 상태는 기호+테두리로 유지 (보안 리포트는 PDF로 결재됨) */
+        .error { border-left:3px solid var(--bad); padding:8px 0 8px 12px; font-size:.82rem;
+                 word-break:break-all; color:var(--bad); }
+        .empty { color:var(--faint); font-style:italic; }
+        footer { color:var(--faint); font-size:.73rem; margin-top:24px; padding-top:14px;
+                 border-top:1px solid var(--line); }
+        footer dl { margin:0; }
+        footer dt { font-weight:600; color:var(--muted); float:left; clear:left;
+                    width:7.5em; margin:0; }
+        footer dd { margin:0 0 3px 7.5em; }
+
+        /* 인쇄와 PDF. 보안 리포트는 결재 문서로 나간다. */
         @media print {
             body { background:#fff; color:#000; padding:0; }
-            .sub, .kpi .lbl, .target .url, th, footer { color:#333; }
-            .kpi, .target { background:#fff; border:1px solid #999; }
-            .kpi.alert .num { color:#000; }
-            th, td { border-bottom:1px solid #999; }
-            tr.regression { background:#eee !important;
-                            -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-            .badge { background:#fff !important; color:#000 !important; border:1px solid #333; }
-            .st-FAIL, .st-PASS { color:#000; }
-            .allclear { background:#fff; color:#000; border:1px solid #333; }
+            .sub, .cell .lbl, .target .url, th, footer, .note { color:#444; }
+            .strip, .target { background:#fff; border-color:#aaa; }
+            .cell { border-right-color:#aaa; }
+            .cell .num, .verdict { color:#000 !important; }
+            .verdict { border-left-color:#000; }
+            th, td { border-bottom-color:#ccc; }
+            tr.act td, tr.expired td { background:#f2f2f2 !important;
+                     -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+            tr.accepted td, tr.accepted .note { color:#666; }
+            .tag { background:#fff !important; color:#000 !important; border:1px solid #333; }
+            .st-FAIL, .st-PASS, .st-MISSING, .error { color:#000; }
+            .error { border-left-color:#000; }
         }
     </style>
 </head>
 <body>
-    <h1>🧵 TestWeave 보안 회귀 리포트</h1>
-    <div class="sub">생성(서버 시각): <span th:text="${generatedAt}">-</span></div>
+<div class="wrap">
+    <h1>TestWeave 보안 회귀 리포트</h1>
+    <div class="sub">생성(서버 시각) <span th:text="${generatedAt}">-</span></div>
 
-    <div class="summary">
-        <div class="kpi" th:classappend="${totalRegressions > 0} ? 'alert'">
+    <div class="verdict bad"
+         th:if="${totalRegressions > 0 or totalMissing > 0 or totalErrors > 0}">
+        <span th:text="'조치 필요: 회귀 ' + ${totalRegressions} + ', 소멸 ' + ${totalMissing}
+                       + ', 스캔 오류 ' + ${totalErrors}">조치 필요</span>
+        <span class="why">회귀는 직전에 충족하던 항목이 이번에 깨진 것이고, 소멸은 직전엔 쟀는데
+            이번 결과에 없는 것이라 대상 자체가 안 잡혔을 수 있습니다.</span>
+    </div>
+    <div class="verdict warn"
+         th:if="${totalRegressions == 0 and totalMissing == 0 and totalErrors == 0 and totalExpired > 0}">
+        <span th:text="'수용 기한 만료 ' + ${totalExpired} + '건'">수용 기한 만료</span>
+        <span class="why">다시 보기로 정한 날이 지났습니다. 기한을 연장하든 조치하든
+            판단을 갱신해야 합니다.</span>
+    </div>
+    <div class="verdict warn"
+         th:if="${totalRegressions == 0 and totalMissing == 0 and totalErrors == 0
+                  and totalExpired == 0 and totalFails > 0}">
+        <span th:text="'미충족 ' + ${totalFails} + '건'">미충족</span>
+        <span class="why">회귀는 없지만 아직 충족하지 못한 항목이 남아 있습니다.</span>
+    </div>
+    <div class="verdict ok"
+         th:if="${totalRegressions == 0 and totalMissing == 0 and totalErrors == 0
+                  and totalExpired == 0 and totalFails == 0}">
+        <span th:text="${totalAccepted > 0}
+                       ? '조치 대상 없음 (수용 ' + ${totalAccepted} + '건)'
+                       : '조치 대상 없음'">조치 대상 없음</span>
+        <span class="why" th:if="${totalAccepted > 0}">수용분은 기한 내라 집계에서 빠져 있습니다.
+            아래 목록에서 사유와 남은 기간을 확인하세요.</span>
+    </div>
+
+    <div class="strip">
+        <div class="cell" th:classappend="${totalRegressions > 0} ? 'bad' : 'quiet'">
             <div class="num" th:text="${totalRegressions}">0</div>
-            <div class="lbl">REGRESSION (후퇴)</div>
+            <div class="lbl">회귀</div>
         </div>
-        <div class="kpi" th:if="${totalMissing > 0}" th:classappend="'alert'">
+        <div class="cell" th:classappend="${totalMissing > 0} ? 'warn' : 'quiet'">
             <div class="num" th:text="${totalMissing}">0</div>
-            <div class="lbl">MISSING (못 잼)</div>
+            <div class="lbl">소멸</div>
         </div>
-        <div class="kpi ok">
-            <div class="num" th:text="${totalFixed}">0</div>
-            <div class="lbl">FIXED (개선)</div>
-        </div>
-        <div class="kpi" th:classappend="${totalFails > 0} ? 'alert'">
+        <div class="cell" th:classappend="${totalFails > 0} ? 'bad' : 'quiet'">
             <div class="num" th:text="${totalFails}">0</div>
-            <div class="lbl">FAIL (현재 미충족)</div>
+            <div class="lbl">미충족</div>
         </div>
-        <div class="kpi">
+        <div class="cell quiet" th:if="${totalAccepted > 0 or totalExpired > 0}">
+            <div class="num" th:text="${totalAccepted}">0</div>
+            <div class="lbl">수용</div>
+        </div>
+        <div class="cell warn" th:if="${totalExpired > 0}">
+            <div class="num" th:text="${totalExpired}">0</div>
+            <div class="lbl">수용 만료</div>
+        </div>
+        <div class="cell warn" th:if="${totalExpired == 0 and totalDueSoon > 0}">
+            <div class="num" th:text="${totalDueSoon}">0</div>
+            <div class="lbl">기한 임박</div>
+        </div>
+        <div class="cell" th:classappend="${totalFixed > 0} ? 'good' : 'quiet'">
+            <div class="num" th:text="${totalFixed}">0</div>
+            <div class="lbl">개선</div>
+        </div>
+        <div class="cell quiet">
             <div class="num" th:text="${totalRules}">0</div>
             <div class="lbl">점검 규칙</div>
         </div>
-        <div class="kpi" th:if="${totalErrors > 0}" th:classappend="'alert'">
+        <div class="cell bad" th:if="${totalErrors > 0}">
             <div class="num" th:text="${totalErrors}">0</div>
             <div class="lbl">스캔 오류</div>
         </div>
-    </div>
-
-    <div class="allclear"
-         th:if="${totalRegressions == 0 and totalFails == 0 and totalErrors == 0}">
-        ✓ 정상 — 회귀·실패·스캔 오류 없음
     </div>
 
     <div class="target" th:each="t : ${reports}">
         <h2 th:text="${t.name}">target</h2>
         <div class="url" th:text="${t.url}">url</div>
 
+        <div class="tsum" th:unless="${t.hasError()}">
+            <span class="tag REGRESSION" th:if="${t.countVerdict('REGRESSION') > 0}"
+                  th:text="'회귀 ' + ${t.countVerdict('REGRESSION')}">회귀</span>
+            <span class="tag MISSING" th:if="${t.countMissing() > 0}"
+                  th:text="'소멸 ' + ${t.countMissing()}">소멸</span>
+            <span class="tag lapsed" th:if="${t.countExpired() > 0}"
+                  th:text="'수용 만료 ' + ${t.countExpired()}">수용 만료</span>
+            <span class="tag unmet" th:if="${t.countFail() > 0}"
+                  th:text="'미충족 ' + ${t.countFail()}">미충족</span>
+            <span class="tag hold" th:if="${t.countAccepted() > 0}"
+                  th:text="'수용 ' + ${t.countAccepted()}">수용</span>
+            <span class="tag SAME"
+                  th:if="${t.countVerdict('REGRESSION') == 0 and t.countMissing() == 0
+                          and t.countExpired() == 0 and t.countFail() == 0}">조치 대상 없음</span>
+        </div>
+
         <div class="error" th:if="${t.hasError()}"
              th:text="'스캔 실패: ' + ${t.error}">스캔 실패</div>
 
-        <div class="tsum" th:unless="${t.hasError()}">
-            <span class="badge REGRESSION" th:if="${t.countVerdict('REGRESSION') > 0}"
-                  th:text="'REGRESSION ' + ${t.countVerdict('REGRESSION')}">REGRESSION</span>
-            <span class="badge MISSING" th:if="${t.countMissing() > 0}"
-                  th:text="'MISSING ' + ${t.countMissing()}">MISSING</span>
-            <span class="badge FIXED" th:if="${t.countFail() > 0}"
-                  style="background:#7f1d1d;color:#fecaca"
-                  th:text="'FAIL ' + ${t.countFail()}">FAIL</span>
-            <span class="badge SAME"
-                  th:if="${t.countVerdict('REGRESSION') == 0 and t.countFail() == 0 and t.countMissing() == 0}">정상</span>
-        </div>
-
         <table th:unless="${t.hasError()}">
             <thead>
-                <tr><th scope="col">모듈</th><th scope="col">규칙</th><th scope="col">직전</th>
-                    <th scope="col">현재</th><th scope="col">판정</th></tr>
+                <tr>
+                    <th scope="col">모듈</th><th scope="col">규칙</th>
+                    <th scope="col">직전</th><th scope="col">현재</th><th scope="col">판정</th>
+                </tr>
             </thead>
             <tbody>
                 <tr th:each="r : ${t.regressions}"
-                    th:classappend="${r.verdict() == 'REGRESSION'} ? 'regression' : (${r.verdict() == 'MISSING'} ? 'missing')">
-                    <td th:text="${r.checkType()}">HEADER</td>
-                    <td th:text="${r.rule()}">rule</td>
-                    <td th:text="${r.previous()} ?: '—'">-</td>
-                    <td><span th:text="${r.current()}" th:class="'st-' + ${r.current()}">-</span></td>
-                    <td><span class="badge" th:classappend="${r.verdict()}"
-                              th:text="${r.verdict()}">SAME</span></td>
+                    th:class="${r.acceptanceExpired()} ? 'expired'
+                              : (${r.accepted()} ? 'accepted'
+                              : (${r.verdict() == 'REGRESSION' or r.verdict() == 'MISSING'
+                                   or r.actionableFail()} ? 'act' : ''))">
+                    <td class="mod" th:text="${r.checkType()}">HEADER</td>
+                    <td class="rule">
+                        <span th:text="${r.rule()}">rule</span>
+                        <div class="note" th:if="${r.acceptance() != null}">
+                            <b th:text="'기한 ' + ${#temporals.format(r.acceptance().until(), 'yyyy-MM-dd')}">기한</b>
+                            <span th:if="${r.accepted()}"
+                                  th:text="'(' + ${r.acceptance().daysLeft()} + '일 남음)'">(남음)</span>
+                            <span th:if="${r.acceptanceExpired()}"
+                                  th:text="'(' + ${-r.acceptance().daysLeft()} + '일 지남)'">(지남)</span>
+                            <span th:text="', ' + ${r.acceptance().reason()}">사유</span>
+                        </div>
+                    </td>
+                    <td th:text="${r.previous()} ?: '-'">-</td>
+                    <td><span class="st" th:text="${r.current()}"
+                              th:classappend="'st-' + ${r.current()}">-</span></td>
+                    <td>
+                        <span class="tag" th:classappend="${r.verdict()}"
+                              th:text="${r.verdict()}">SAME</span>
+                        <span class="tag hold" th:if="${r.accepted()}">수용</span>
+                        <span class="tag lapsed" th:if="${r.acceptanceExpired()}">수용 만료</span>
+                        <span class="tag void" th:if="${r.acceptanceRejected()}">수용 무효</span>
+                    </td>
                 </tr>
                 <tr th:if="${#lists.isEmpty(t.regressions)}">
                     <td colspan="5" class="empty">점검 결과 없음</td>
@@ -140,6 +253,16 @@
         </table>
     </div>
 
-    <footer>TestWeave — 웹 보안 설정 회귀 스캐너. REGRESSION = 직전 PASS에서 이번 FAIL (보안 후퇴). MISSING = 직전엔 쟀는데 이번 결과에 없음 (대상 불통 신호).</footer>
+    <footer>
+        <dl>
+            <dt>회귀</dt><dd>직전엔 충족했는데 이번에 깨진 항목.</dd>
+            <dt>소멸</dt><dd>직전엔 측정됐는데 이번 결과에 없는 항목. 대상이 안 잡혔을 신호.</dd>
+            <dt>미충족</dt><dd>지금 조치가 필요한 항목. 기한 내 수용분은 빠진다.</dd>
+            <dt>수용</dt><dd>사유와 기한을 적어 유보한 항목. 기한이 지나면 미충족으로 돌아온다.</dd>
+            <dt>수용 무효</dt><dd>수용해 뒀으나 회귀나 소멸이 나서 적용하지 않은 항목.
+                판단 근거가 바뀌었다는 뜻이다.</dd>
+        </dl>
+    </footer>
+</div>
 </body>
 </html>
