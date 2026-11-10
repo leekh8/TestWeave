@@ -169,3 +169,10 @@ reports/
 # 스캔 대상 목록. 업무 대상 URL이 들어가므로 공개 저장소에 올리지 않는다.
 # 형식과 사용법은 targets.sample.txt 참고.
 targets.local.txt
+
+# 업무 대상 수용 기록. 공개 저장소에 올리지 않는다 (exceptions.txt 참고).
+exceptions.local.txt
+
+# Python 자취. tools/browser-probe 가 파이썬이라 Java 기준 무시 목록으로는 안 막힌다.
+__pycache__/
+*.py[cod]
