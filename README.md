@@ -196,6 +196,48 @@ python tools/browser-probe/probe.py --targets targets.local.txt \
     --out reports/browser-findings.json
 ```
 
-매일 도는 스캔에 브라우저 런타임을 얹지 않기 위해 따로 둔다. 지금은 json 까지만 만들고,
-**본체가 이 결과를 읽어 점검 결과로 흡수하는 배선은 아직이다** (`grep -r browser-findings src`
-가 0건). 회귀 판정과 수용 등록부와 리포트는 본체에 이미 있어서 다시 만들 이유가 없다.
+매일 도는 스캔에 브라우저 런타임을 얹지 않기 위해 따로 둔다. 회귀 판정과 수용 등록부와
+리포트는 본체에 이미 있어서 다시 만들 이유가 없다.
+
+### 본체가 흡수한다 (BROWSER 모듈)
+
+`BrowserCheck` 가 그 json 을 읽어 **다른 점검과 똑같이** 취급한다. 파이썬이 내는
+`rule / status / detail` 세 칸이 Java 의 `CheckOutcome` 과 그대로 같아서 변환이 없다.
+그래서 브라우저에서 잡은 결함도 회귀 판정(`REGRESSION` / `FIXED` / `NEW` / `SAME`)과
+수용 등록부와 HTML 리포트를 전부 그대로 탄다.
+
+**켜는 순서가 있다.** 뒤집으면 첫 회차가 통째로 FAIL 이다.
+
+```bash
+# 1. 먼저 점검기를 돌려 결과를 만든다
+python tools/browser-probe/probe.py --targets targets.local.txt \
+    --out reports/browser-findings.json
+
+# 2. 그다음 BROWSER 를 켠다
+#    application-ci.properties 의 testweave.ci.check-types 에 BROWSER 를 더하거나
+./gradlew bootRun --args='--spring.profiles.active=ci \
+    --testweave.ci.check-types=HEADER,COOKIE,TLS,BROWSER'
+```
+
+| 설정 | 기본값 | |
+|---|---|---|
+| `testweave.browser-findings-file` | `reports/browser-findings.json` | 점검기 결과 |
+| `testweave.browser-findings-max-hours` | `26` | 이보다 낡으면 FAIL |
+
+> 🛑 **결과가 없으면 통과가 아니라 미충족이다.**
+> 파일이 없거나, 이 대상이 그 안에 없거나, json 이 낡았거나, 모르는 `status` 가
+> 들어 있으면 전부 FAIL 로 낸다.
+>
+> 조용히 비우면 「브라우저 점검을 켰는데 아무 말도 없다」가 되고, 그것은
+> **「문제가 없다」와 구별되지 않는다.** 이 저장소가 같은 모양으로 한 번 죽었다 -
+> 메일 설정이 없는 CI 가 10일간 초록불을 켜는 동안 권고문이 지나갔다.
+>
+> 낡은 결과를 막는 이유는 따로 있다. 회귀 판정은 「지난번 대비 지금」을 보는
+> 것인데 낡은 파일을 현재로 읽으면 **그 비교가 거짓말이 된다.** 어제 고친 것이
+> 오늘도 FAIL 로 남거나, 오늘 깨진 것이 어제 값으로 PASS 가 된다.
+>
+> 🛑 **규칙 이름은 다듬지 않고 그대로 옮긴다.** 수용 등록부가 리포트에 나오는
+> 이름 그대로 매칭한다. 한 글자라도 다르면 등록해 둔 수용이 조용히 적용되지 않는다.
+
+아직 CI 에서는 켜지 않았다. 켜려면 워크플로에 파이썬과 Chromium 설치가 들어가고
+(매 회차 내려받는 양이 늘어난다), 그 비용을 쓸지는 따로 판단할 일이다.
